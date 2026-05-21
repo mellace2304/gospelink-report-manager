@@ -5,7 +5,7 @@ from docx import Document
 from pathlib import Path
 import time
 from docx.oxml.ns import qn
-from docx.oxml.shared import OxmlElement
+from docx.oxml.parser import OxmlElement
 from copy import deepcopy
 import pythoncom
 import win32com.client
@@ -141,7 +141,7 @@ class Donor:
                 reasons[preacher.pNum] = preacher.reasons()
         return reasons
 
-def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx") -> dict[Donor]:
+def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx") -> dict[str,Donor]:
     coverSheetDF = pd.read_excel(file)
     dropColumns = ['Type', 'Status', 'Note', 'Sponsorship Amount', 'Pledge','Donor/Preacher Combo']
     coverSheetDF = coverSheetDF.dropna(subset=['Account Number'])
@@ -169,13 +169,13 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
 
     donors = {}
     for _, row in coverSheetDF.iterrows():
-        row = row.fillna("").to_dict()
-        aNum = row["aNum"]
+        row = {str(k): v for k, v in row.fillna("").to_dict().items()}
+        aNum = str(row["aNum"])
 
         if aNum not in donors:
             donors[aNum] = Donor(**row)
         else:
-            donors[aNum].addPreacher(row["pNum"], row["pName"])
+            donors[aNum].addPreacher(str(row["pNum"]), str(row["pName"]))
     
     return donors
 
@@ -193,7 +193,7 @@ def findDonor(*, eNum=None, eName=None, aNum=None, donors=None) -> Donor | None:
     return None
 
 
-def enforceTY(donors:dict[Donor],extraGiftFile:str = "") -> None:
+def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> None:
     # Get data from both sheets, rename columns, and concatenate into one DataFrame
     tempsheet1 = pd.read_excel(extraGiftFile,sheet_name="Spons Xtra")
     tempsheet1 = tempsheet1.rename(columns={
@@ -236,7 +236,7 @@ def enforceTY(donors:dict[Donor],extraGiftFile:str = "") -> None:
         if preacher is not None:
             preacher.enforce()
         
-def addReports(donors:dict[Donor],directory:str=".\\Data\\Reports") -> None:
+def addReports(donors:dict[str,Donor],directory:str=".\\Data\\Reports") -> None:
     reports = os.listdir(directory)
     blacklist=["pcf","widow","rdf",".docx","rd"]
 
