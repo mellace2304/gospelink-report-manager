@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gospelink Report Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        :root{
+            --bg:#f5f0ea;--bg-card:#fffdf9;--bg-sidebar:#2c2825;--bg-sidebar-hover:#3d3835;
+            --bg-input:#fff;--border:#e0d8ce;--border-light:#ece6dc;
+            --text:#2c2825;--text-secondary:#7a7068;--text-sidebar:#c4b8aa;--text-sidebar-bright:#f5f0ea;
+            --accent:#b8860b;--accent-light:#f5eddc;
+            --green:#2d7a3a;--green-bg:#e8f5ea;--green-border:#b8dbbe;
+            --red:#b8332b;--red-bg:#fce8e7;--red-border:#f0b8b5;
+            --amber:#b8860b;--amber-bg:#fef5e0;--amber-border:#f0d88a;
+            --blue:#2563eb;--blue-bg:#eff6ff;
+            --radius:8px;--radius-lg:12px;
+            --shadow-sm:0 1px 2px rgba(44,40,37,0.06);--shadow:0 2px 8px rgba(44,40,37,0.08);
+            --shadow-lg:0 4px 16px rgba(44,40,37,0.12);
+            --font-body:'DM Sans',sans-serif;--font-display:'Instrument Serif',Georgia,serif;
+            --font-mono:'JetBrains Mono',monospace;--sidebar-width:280px;
+        }
+        body{font-family:var(--font-body);background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+        .app-layout{display:flex;min-height:100vh}
+        .sidebar{width:var(--sidebar-width);background:var(--bg-sidebar);color:var(--text-sidebar);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto}
+        .main-content{margin-left:var(--sidebar-width);flex:1;padding:32px 40px;max-width:1200px}
+        .sidebar-header{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,0.08)}
+        .sidebar-header h1{font-family:var(--font-display);font-size:22px;color:var(--text-sidebar-bright);font-weight:400;letter-spacing:-0.02em}
+        .sidebar-header .quarter-badge{display:inline-block;font-family:var(--font-mono);font-size:11px;color:var(--accent);background:rgba(184,134,11,0.15);padding:3px 10px;border-radius:20px;margin-top:8px;letter-spacing:0.04em}
+        .sidebar-section{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06)}
+        .sidebar-section-title{font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:rgba(196,184,170,0.5);margin-bottom:14px;font-weight:600}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);cursor:pointer;font-size:13.5px;transition:all 0.15s;margin-bottom:2px;user-select:none}
+        .nav-item:hover{background:var(--bg-sidebar-hover)}
+        .nav-item.active{background:rgba(184,134,11,0.15);color:var(--accent)}
+        .nav-item .icon{font-size:16px;width:20px;text-align:center}
+        .nav-item .badge{margin-left:auto;font-family:var(--font-mono);font-size:10px;background:rgba(184,134,11,0.25);color:var(--accent);padding:1px 7px;border-radius:10px}
+        .step-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius);font-size:13px;margin-bottom:3px}
+        .step-dot{width:8px;height:8px;border-radius:50%;background:rgba(196,184,170,0.3);flex-shrink:0;transition:all 0.3s}
+        .step-dot.complete{background:var(--green);box-shadow:0 0 6px rgba(45,122,58,0.4)}
+        .step-btn{background:none;border:1px solid rgba(255,255,255,0.12);color:var(--text-sidebar);font-family:var(--font-body);font-size:12.5px;padding:7px 14px;border-radius:var(--radius);cursor:pointer;width:100%;text-align:left;display:flex;align-items:center;gap:8px;transition:all 0.15s;margin-top:6px}
+        .step-btn:hover{background:var(--bg-sidebar-hover);border-color:rgba(255,255,255,0.2);color:var(--text-sidebar-bright)}
+        .step-btn:disabled{opacity:0.35;cursor:not-allowed}
+        .step-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+        .step-btn.primary:hover{background:#a07509}
+        .page-header{margin-bottom:28px}
+        .page-header h2{font-family:var(--font-display);font-size:30px;font-weight:400;letter-spacing:-0.02em}
+        .page-header p{color:var(--text-secondary);font-size:14px;margin-top:4px}
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:28px}
+        .stat-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:18px 20px;box-shadow:var(--shadow-sm)}
+        .stat-card .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-secondary);margin-bottom:6px;font-weight:500}
+        .stat-card .stat-value{font-family:var(--font-mono);font-size:28px;font-weight:500;line-height:1.1}
+        .stat-card .stat-sub{font-size:12px;color:var(--text-secondary);margin-top:4px}
+        .stat-card.green .stat-value{color:var(--green)}
+        .stat-card.red .stat-value{color:var(--red)}
+        .stat-card.amber .stat-value{color:var(--amber)}
+        .progress-bar-wrap{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:28px;box-shadow:var(--shadow-sm)}
+        .progress-bar-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+        .progress-bar-header span{font-size:13px;color:var(--text-secondary)}
+        .progress-bar-header strong{font-family:var(--font-mono);font-size:14px}
+        .progress-track{width:100%;height:10px;background:var(--border-light);border-radius:10px;overflow:hidden}
+        .progress-fill{height:100%;background:linear-gradient(90deg,var(--green),#4caf50);border-radius:10px;transition:width 0.6s cubic-bezier(0.22,1,0.36,1)}
+        .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+        .search-box{flex:1;min-width:220px;position:relative}
+        .search-box input{width:100%;padding:9px 14px 9px 36px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-body);font-size:13.5px;background:var(--bg-input);color:var(--text);outline:none;transition:border-color 0.15s}
+        .search-box input:focus{border-color:var(--accent)}
+        .search-box .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-secondary);font-size:14px}
+        .filter-btn{padding:9px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-body);font-size:13px;cursor:pointer;color:var(--text-secondary);transition:all 0.15s;white-space:nowrap}
+        .filter-btn:hover{border-color:var(--text-secondary)}
+        .filter-btn.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+        .card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden}
+        .card-header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-light)}
+        .card-header h3{font-size:14px;font-weight:600}
+        .card-body{padding:20px}
+        .donor-table{width:100%;border-collapse:collapse}
+        .donor-table th{text-align:left;padding:12px 16px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-secondary);font-weight:600;background:rgba(0,0,0,0.015);border-bottom:1px solid var(--border-light);cursor:pointer;user-select:none}
+        .donor-table th:hover{color:var(--text)}
+        .donor-table td{padding:11px 16px;font-size:13.5px;border-bottom:1px solid var(--border-light);vertical-align:top}
+        .donor-table tr:last-child td{border-bottom:none}
+        .donor-table tbody tr{cursor:pointer;transition:background 0.1s}
+        .donor-table tbody tr:hover{background:rgba(184,134,11,0.04)}
+        .donor-table tbody tr.expanded{background:rgba(184,134,11,0.06)}
+        .status-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:3px 10px;border-radius:20px}
+        .status-badge.ready{background:var(--green-bg);color:var(--green)}
+        .status-badge.not-ready{background:var(--red-bg);color:var(--red)}
+        .status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+        .status-dot.ready{background:var(--green)}
+        .status-dot.not-ready{background:var(--red)}
+        .donor-detail{padding:0 16px 16px;animation:slideDown 0.2s ease}
+        @keyframes slideDown{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+        .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+        .detail-section{background:var(--bg);border-radius:var(--radius);padding:14px 16px}
+        .detail-section h4{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-secondary);margin-bottom:10px;font-weight:600}
+        .preacher-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);font-size:13px}
+        .preacher-row:last-child{border-bottom:none}
+        .preacher-num{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);min-width:60px}
+        .issue-tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;margin-top:3px;margin-right:4px;font-weight:500}
+        .issue-tag.report{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+        .issue-tag.ty{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+        .issue-tag.cover{background:var(--blue-bg);color:var(--blue);border:1px solid #bfdbfe}
+        .issue-tag.ok{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+        .pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border-light);font-size:13px;color:var(--text-secondary)}
+        .pagination button{padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-card);font-family:var(--font-body);font-size:12.5px;cursor:pointer;color:var(--text);transition:all 0.15s}
+        .pagination button:hover{background:var(--bg)}
+        .pagination button:disabled{opacity:0.4;cursor:not-allowed}
+        .config-panel{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow-sm)}
+        .config-field{margin-bottom:16px}
+        .config-field label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);margin-bottom:6px}
+        .config-field .input-row{display:flex;gap:8px}
+        .config-field input{flex:1;padding:9px 14px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-mono);font-size:12.5px;background:var(--bg-input);color:var(--text);outline:none;transition:border-color 0.15s}
+        .config-field input:focus{border-color:var(--accent)}
+        .browse-btn{padding:9px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);font-family:var(--font-body);font-size:12.5px;cursor:pointer;color:var(--text);transition:all 0.15s;white-space:nowrap;display:flex;align-items:center;gap:6px}
+        .browse-btn:hover{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+        .browse-btn:disabled{opacity:0.5;cursor:not-allowed}
+        .btn{padding:10px 20px;border:none;border-radius:var(--radius);font-family:var(--font-body);font-size:13.5px;font-weight:500;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+        .btn-primary{background:var(--accent);color:#fff}
+        .btn-primary:hover{background:#a07509}
+        .btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--text)}
+        .btn-secondary:hover{border-color:var(--text-secondary)}
+        .btn-danger{background:var(--red);color:#fff}
+        .btn-danger:hover{background:#9b2a23}
+        .btn-sm{padding:6px 12px;font-size:12px}
+        .btn:disabled{opacity:0.5;cursor:not-allowed}
+        .issues-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+        .issue-count{font-family:var(--font-mono);font-size:13px;font-weight:500;padding:2px 10px;border-radius:20px}
+        .issue-count.red{background:var(--red-bg);color:var(--red)}
+        .issue-count.amber{background:var(--amber-bg);color:var(--amber)}
+        .issue-count.blue{background:var(--blue-bg);color:var(--blue)}
+        .issue-list-item{padding:10px 20px;font-size:13px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center}
+        .issue-list-item:last-child{border-bottom:none}
+        .issue-list-item .mono{font-family:var(--font-mono);font-size:11.5px;color:var(--text-secondary)}
+        .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:var(--radius);font-size:13.5px;font-weight:500;box-shadow:var(--shadow-lg);z-index:999;animation:toastIn 0.3s ease;max-width:420px}
+        .toast.success{background:var(--green);color:#fff}
+        .toast.error{background:var(--red);color:#fff}
+        .toast.info{background:var(--text);color:var(--bg)}
+        @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite}
+        .spinner.dark{border-color:rgba(44,40,37,0.15);border-top-color:var(--text)}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .empty-state{text-align:center;padding:60px 20px;color:var(--text-secondary)}
+        .empty-state .es-icon{font-size:40px;margin-bottom:12px;opacity:0.5}
+        .empty-state h3{font-size:16px;margin-bottom:6px;color:var(--text)}
+        .empty-state p{font-size:13.5px}
+        .scrollable{max-height:400px;overflow-y:auto}
+        .scrollable::-webkit-scrollbar{width:6px}
+        .scrollable::-webkit-scrollbar-track{background:transparent}
+        .scrollable::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+        .merge-option{border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:20px;margin-bottom:12px;transition:all 0.15s;cursor:default;background:var(--bg-card)}
+        .merge-option:hover{border-color:var(--accent);box-shadow:var(--shadow-sm)}
+        .merge-option h4{font-size:14px;font-weight:600;margin-bottom:4px}
+        .merge-option p{font-size:13px;color:var(--text-secondary);margin-bottom:12px}
+        .history-item{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border-light)}
+        .history-item:last-child{border-bottom:none}
+        .history-item .h-label{font-weight:500;font-size:13.5px}
+        .history-item .h-meta{font-size:12px;color:var(--text-secondary);margin-top:2px}
+        .history-item .h-count{font-family:var(--font-mono);font-size:20px;font-weight:500;color:var(--green)}
+        .config-history-item{padding:12px 16px;border-bottom:1px solid var(--border-light);cursor:pointer;transition:background 0.1s;font-size:13px}
+        .config-history-item:hover{background:var(--accent-light)}
+        .config-history-item:last-child{border-bottom:none}
+        .config-history-item .ch-ts{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+        .detail-actions{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light)}
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+const API = "http://localhost:5000/api";
+
+async function api(path, opts = {}) {
+    const url = `${API}${path}`;
+    const res = await fetch(url, {
+        headers: { "Content-Type": "application/json" },
+        ...opts,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    return res.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function Toast({ message, type, onClose }) {
+    useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, []);
+    return <div className={`toast ${type}`}>{message}</div>;
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────
+function Sidebar({ page, setPage, status, onRunStep, loading }) {
+    const steps = [
+        { key: "load", label: "Load Donors", icon: "📋" },
+        { key: "coverletters", label: "Assign Cover Letters", icon: "📄" },
+        { key: "enforce_ty", label: "Enforce TY Notes", icon: "✉️" },
+        { key: "reports", label: "Add Reports", icon: "📎" },
+    ];
+    const completed = status?.stepsCompleted || [];
+    const notReady = status?.notReady || 0;
+
+    return (
+        <div className="sidebar">
+            <div className="sidebar-header">
+                <h1>Gospelink</h1>
+                <div className="quarter-badge">REPORT MANAGER</div>
+            </div>
+            <div className="sidebar-section">
+                <div className="sidebar-section-title">Navigation</div>
+                {[
+                    { key: "dashboard", icon: "📊", label: "Dashboard" },
+                    { key: "donors", icon: "👥", label: "Donors" },
+                    { key: "issues", icon: "⚠️", label: "Issues", badge: notReady || null },
+                    { key: "merge", icon: "📦", label: "Merge & Export" },
+                    { key: "config", icon: "⚙️", label: "Configuration" },
+                ].map(nav => (
+                    <div key={nav.key}
+                         className={`nav-item ${page === nav.key ? "active" : ""}`}
+                         onClick={() => setPage(nav.key)}>
+                        <span className="icon">{nav.icon}</span> {nav.label}
+                        {nav.badge && <span className="badge">{nav.badge}</span>}
+                    </div>
+                ))}
+            </div>
+            <div className="sidebar-section">
+                <div className="sidebar-section-title">Pipeline</div>
+                {steps.map(step => (
+                    <div className="step-item" key={step.key}>
+                        <div className={`step-dot ${completed.includes(step.key) ? "complete" : ""}`} />
+                        <span style={{ fontSize: "13px" }}>{step.icon} {step.label}</span>
+                    </div>
+                ))}
+                <button className="step-btn" onClick={() => onRunStep("run-all")} disabled={loading}>
+                    {loading ? <span className="spinner" /> : "▶"} Run All Steps
+                </button>
+            </div>
+            {status?.loaded && (
+                <div className="sidebar-section" style={{ marginTop: "auto" }}>
+                    <div style={{ fontSize: "12px", opacity: 0.6 }}>
+                        {status.total} donors loaded<br />{status.ready} ready to merge
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────
+function DashboardPage({ status }) {
+    if (!status?.loaded) return (
+        <div>
+            <div className="page-header"><h2>Dashboard</h2><p>Configure your file paths and run the pipeline to get started.</p></div>
+            <div className="empty-state"><div className="es-icon">📂</div><h3>No Data Loaded</h3><p>Go to Configuration to set your file paths, then run the pipeline.</p></div>
+        </div>
+    );
+    const pct = status.total > 0 ? ((status.ready / status.total) * 100).toFixed(1) : 0;
+    return (
+        <div>
+            <div className="page-header"><h2>Dashboard</h2><p>Overview of quarterly report readiness</p></div>
+            <div className="progress-bar-wrap">
+                <div className="progress-bar-header"><span>Merge Readiness</span><strong>{pct}%</strong></div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+            </div>
+            <div className="stats-row">
+                <div className="stat-card"><div className="stat-label">Total Donors</div><div className="stat-value">{status.total.toLocaleString()}</div></div>
+                <div className="stat-card green"><div className="stat-label">Ready</div><div className="stat-value">{status.ready.toLocaleString()}</div><div className="stat-sub">{pct}% of total</div></div>
+                <div className="stat-card red"><div className="stat-label">Not Ready</div><div className="stat-value">{status.notReady.toLocaleString()}</div></div>
+                <div className="stat-card amber"><div className="stat-label">Missing Reports</div><div className="stat-value">{status.missingReports.toLocaleString()}</div></div>
+                <div className="stat-card amber"><div className="stat-label">Missing TY Notes</div><div className="stat-value">{status.missingTYNotes.toLocaleString()}</div></div>
+                <div className="stat-card"><div className="stat-label">Missing Covers</div><div className="stat-value">{status.missingCoverLetters.toLocaleString()}</div></div>
+            </div>
+        </div>
+    );
+}
+
+// ── Donor Detail (expanded row) ───────────────────────────────────────────
+function DonorDetail({ donor, onAction, actionLoading }) {
+    const d = donor;
+    const preachers = Object.values(d.preachers);
+    return (
+        <div className="donor-detail">
+            <div className="detail-grid">
+                <div className="detail-section">
+                    <h4>Contact Info</h4>
+                    <div style={{ fontSize: "13px", lineHeight: 1.8 }}>
+                        <strong>{d.eName}</strong>
+                        {d.additional && <div style={{ color: "var(--text-secondary)" }}>{d.additional}</div>}
+                        <div>{d.street}</div>
+                        <div>{d.city}, {d.state} {d.zip}</div>
+                        {d.email && <div style={{ color: "var(--accent)" }}>{d.email}</div>}
+                        <div style={{ marginTop: "6px" }}>
+                            {d.coverLetter
+                                ? <span className="issue-tag ok">✓ Cover Letter</span>
+                                : <span className="issue-tag cover">Missing Cover Letter</span>}
+                            {d.sendQuarterly && <span className="issue-tag ok" style={{ background: "var(--blue-bg)", color: "var(--blue)", borderColor: "#bfdbfe" }}>E-Mail Quarterly</span>}
+                        </div>
+                    </div>
+                    <div className="detail-actions">
+                        {!d.coverLetter && (
+                            <button className="btn btn-secondary btn-sm"
+                                    disabled={actionLoading}
+                                    onClick={(e) => { e.stopPropagation(); onAction("create-cl", d.aNum); }}>
+                                {actionLoading ? <span className="spinner dark" /> : "📄"} Create Cover Letter
+                            </button>
+                        )}
+                        <button className="btn btn-primary btn-sm"
+                                disabled={actionLoading || d.fileCount === 0}
+                                onClick={(e) => { e.stopPropagation(); onAction("merge-individual", d.aNum); }}>
+                            {actionLoading ? <span className="spinner" /> : "📦"} Merge This Donor
+                        </button>
+                    </div>
+                </div>
+                <div className="detail-section">
+                    <h4>Preachers ({preachers.length})</h4>
+                    {preachers.map(p => (
+                        <div className="preacher-row" key={p.pNum}>
+                            <span className="preacher-num">{p.pNum}</span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 500 }}>{p.pName}</div>
+                                <div style={{ marginTop: "3px" }}>
+                                    {p.report ? <span className="issue-tag ok">✓ Report</span> : <span className="issue-tag report">Missing Report</span>}
+                                    {p.noteNecessary && (p.note ? <span className="issue-tag ok">✓ TY Note</span> : <span className="issue-tag ty">Missing TY Note</span>)}
+                                </div>
+                            </div>
+                            <span className={`status-dot ${p.ready ? "ready" : "not-ready"}`} />
+                        </div>
+                    ))}
+                    {d.extraNotes.length > 0 && (
+                        <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>+ {d.extraNotes.length} extra note(s)</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Donors Page ───────────────────────────────────────────────────────────
+function DonorsPage({ status, showToast, refreshStatus }) {
+    const [donors, setDonors] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [filter, setFilter] = useState("all");
+    const [search, setSearch] = useState("");
+    const [expanded, setExpanded] = useState(null);
+    const [sortBy, setSortBy] = useState("eName");
+    const [actionLoading, setActionLoading] = useState(false);
+    const searchTimeout = useRef(null);
+
+    const fetchDonors = useCallback(async () => {
+        const params = new URLSearchParams({ status: filter, search, sort: sortBy, page: page.toString(), per_page: "40" });
+        const data = await api(`/donors?${params}`);
+        setDonors(data.donors || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+    }, [filter, search, sortBy, page]);
+
+    useEffect(() => { if (status?.loaded) fetchDonors(); }, [fetchDonors, status?.loaded]);
+
+    const handleSearch = (val) => {
+        clearTimeout(searchTimeout.current);
+        searchTimeout.current = setTimeout(() => { setSearch(val); setPage(1); }, 250);
+    };
+
+    const handleAction = async (action, aNum) => {
+        setActionLoading(true);
+        try {
+            if (action === "create-cl") {
+                const res = await api(`/create-coverletter/${aNum}`, { method: "POST" });
+                if (res.ok) { showToast("Cover letter created"); await fetchDonors(); await refreshStatus(); }
+                else showToast(res.error || "Failed", "error");
+            } else if (action === "merge-individual") {
+                const res = await api(`/merge/individual/${aNum}`, { method: "POST" });
+                if (res.ok) showToast(`Merged → ${res.file}`);
+                else showToast(res.error || "Merge failed", "error");
+            }
+        } catch (e) { showToast(e.message, "error"); }
+        setActionLoading(false);
+    };
+
+    if (!status?.loaded) return (
+        <div><div className="page-header"><h2>Donors</h2></div>
+            <div className="empty-state"><div className="es-icon">👥</div><h3>No Data Loaded</h3><p>Run the pipeline to load donor data.</p></div>
+        </div>
+    );
+
+    return (
+        <div>
+            <div className="page-header"><h2>Donors</h2><p>{total.toLocaleString()} donors {filter !== "all" ? `(${filter.replace("_", " ")})` : ""}</p></div>
+            <div className="toolbar">
+                <div className="search-box">
+                    <span className="search-icon">🔍</span>
+                    <input type="text" placeholder="Search by name, envelope #, account #, preacher …" onChange={e => handleSearch(e.target.value)} />
+                </div>
+                {["all", "ready", "not_ready"].map(f => (
+                    <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => { setFilter(f); setPage(1); }}>
+                        {f === "all" ? "All" : f === "ready" ? "Ready" : "Not Ready"}
+                    </button>
+                ))}
+            </div>
+            <div className="card">
+                <table className="donor-table">
+                    <thead><tr>
+                        <th onClick={() => setSortBy("status")} style={{width:"90px"}}>Status</th>
+                        <th onClick={() => setSortBy("eName")}>Envelope Name</th>
+                        <th onClick={() => setSortBy("eNum")} style={{width:"100px"}}>Env #</th>
+                        <th onClick={() => setSortBy("aNum")} style={{width:"100px"}}>Acct #</th>
+                        <th style={{width:"90px"}}>Preachers</th>
+                        <th style={{width:"70px"}}>Files</th>
+                        <th style={{width:"70px"}}>Issues</th>
+                    </tr></thead>
+                    <tbody>
+                    {donors.map(d => {
+                        const isExp = expanded === d.aNum;
+                        const issueCount = Object.keys(d.reasons).reduce((a, k) => {
+                            const v = d.reasons[k]; return a + (Array.isArray(v) ? v.length : 1);
+                        }, 0);
+                        return (
+                            <React.Fragment key={d.aNum}>
+                                <tr className={isExp ? "expanded" : ""} onClick={() => setExpanded(isExp ? null : d.aNum)}>
+                                    <td><span className={`status-badge ${d.ready ? "ready" : "not-ready"}`}><span className={`status-dot ${d.ready ? "ready" : "not-ready"}`} />{d.ready ? "Ready" : "Issues"}</span></td>
+                                    <td style={{fontWeight:500}}>{d.eName}</td>
+                                    <td><span style={{fontFamily:"var(--font-mono)",fontSize:"12.5px"}}>{d.eNum}</span></td>
+                                    <td><span style={{fontFamily:"var(--font-mono)",fontSize:"12.5px"}}>{d.aNum}</span></td>
+                                    <td style={{textAlign:"center"}}>{Object.keys(d.preachers).length}</td>
+                                    <td style={{textAlign:"center"}}>{d.fileCount}</td>
+                                    <td style={{textAlign:"center"}}>
+                                        {issueCount > 0
+                                            ? <span style={{background:"var(--red-bg)",color:"var(--red)",padding:"2px 8px",borderRadius:"10px",fontFamily:"var(--font-mono)",fontSize:"12px",fontWeight:600}}>{issueCount}</span>
+                                            : <span style={{color:"var(--green)",fontSize:"14px"}}>✓</span>}
+                                    </td>
+                                </tr>
+                                {isExp && <tr><td colSpan="7" style={{padding:0}}>
+                                    <DonorDetail donor={d} onAction={handleAction} actionLoading={actionLoading} />
+                                </td></tr>}
+                            </React.Fragment>
+                        );
+                    })}
+                    {donors.length === 0 && <tr><td colSpan="7"><div className="empty-state" style={{padding:"40px"}}><p>No donors match your filters.</p></div></td></tr>}
+                    </tbody>
+                </table>
+                {totalPages > 1 && (
+                    <div className="pagination">
+                        <span>Page {page} of {totalPages} ({total} total)</span>
+                        <div style={{display:"flex",gap:"6px"}}>
+                            <button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>← Prev</button>
+                            <button disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)}>Next →</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Issues Page ───────────────────────────────────────────────────────────
+function IssuesPage({ status }) {
+    const [issues, setIssues] = useState(null);
+    useEffect(() => { if (status?.loaded) api("/issues").then(setIssues); }, [status]);
+    const downloadCSV = () => {
+        if (!issues) return;
+        const rows = [["Preacher #", "Preacher Name", "reportMissing", "TYNoteMissing"]];
+        issues.preachersWithIssues.forEach(p => {
+            rows.push([p.pNum, p.pName, p.reportMissing, p.noteMissing]);
+        });
+        const csv = rows.map(r=> r.join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "issues.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    if (!status?.loaded) return <div><div className="page-header"><h2>Issues</h2></div><div className="empty-state"><div className="es-icon">⚠️</div><h3>No Data Loaded</h3></div></div>;
+    if (!issues) return <div>Loading…</div>;
+    return (
+        <div>
+            <div className="page-header"><h2>Issues</h2><p>All items preventing donors from being merge-ready</p></div>
+            <div style={{ marginBottom: "16px"}}> 
+                <button className="btn btn-secondary btn-sm" onClick={downloadCSV} >
+                    📥 Download All Issues
+                </button>
+            </div>
+            <div className="issues-grid">
+                {[
+                    { key: "missingReports", title: "Missing Reports", color: "red" },
+                    { key: "missingTYNotes", title: "Missing TY Notes", color: "amber" },
+                    { key: "missingCoverLetters", title: "Missing Cover Letters", color: "blue" },
+                ].map(({ key, title, color }) => (
+                    <div className="card" key={key}>
+                        <div className="card-header"><h3>{title}</h3><span className={`issue-count ${color}`}>{issues[key].length}</span></div>
+                        <div className="scrollable">
+                            {issues[key].map((item, i) => (
+                                <div className="issue-list-item" key={i}>
+                                    <div>
+                                        <div style={{fontWeight:500}}>{item.pName || item.eName}</div>
+                                        <div className="mono">{item.pNum ? `P#${item.pNum}` : `A#${item.aNum}`}</div>
+                                    </div>
+                                    <div style={{textAlign:"right"}}>
+                                        <div style={{fontSize:"12.5px"}}>{item.pNum ? item.eName : ""}</div>
+                                        <div className="mono">D#{item.eNum}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {issues[key].length === 0 && <div style={{padding:"20px",textAlign:"center",color:"var(--text-secondary)",fontSize:"13px"}}>None found</div>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ── Merge & Export Page ───────────────────────────────────────────────────
+function MergePage({ status, showToast, refreshStatus }) {
+    const [loading, setLoading] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [prevMergedCount, setPrevMergedCount] = useState(null);
+
+    const loadHistory = async () => {
+        const data = await api("/merge/history");
+        setHistory(data || []);
+        const totalPrev = (data || []).reduce((acc, b) => acc + (b.count || 0), 0);
+        setPrevMergedCount(totalPrev);
+    };
+
+    useEffect(() => { if (status?.loaded) loadHistory(); }, [status]);
+
+    const runMerge = async (endpoint, body = {}) => {
+        setLoading(endpoint);
+        try {
+            const res = await api(`/merge/${endpoint}`, { method: "POST", body });
+            if (res.ok || res.ok === undefined) {
+                const msg = res.merged !== undefined ? `Merged ${res.merged} donors → ${res.folder || "output"}` : (res.message || "Done");
+                showToast(msg);
+                await loadHistory();
+                await refreshStatus();
+            } else {
+                showToast(res.error || "Merge failed", "error");
+            }
+        } catch (e) { showToast(e.message, "error"); }
+        setLoading(null);
+    };
+
+    const runCoverLetters = async (target) => {
+        setLoading("cl-" + target);
+        try {
+            const res = await api("/create-coverletters", { method: "POST", body: { target } });
+            if (res.ok) {
+                showToast(`Created ${res.created} cover letters, ${res.assigned} assigned`);
+                await refreshStatus();
+            } else showToast(res.error || "Failed", "error");
+        } catch (e) { showToast(e.message, "error"); }
+        setLoading(null);
+    };
+
+    if (!status?.loaded) return (
+        <div><div className="page-header"><h2>Merge & Export</h2></div>
+            <div className="empty-state"><div className="es-icon">📦</div><h3>No Data Loaded</h3><p>Run the pipeline first.</p></div>
+        </div>
+    );
+
+    const freshReady = status.ready - (prevMergedCount || 0);
+
+    return (
+        <div>
+            <div className="page-header"><h2>Merge & Export</h2><p>Create merged report PDFs for mailing</p></div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px",marginBottom:"28px"}}>
+                {/* Cover Letters */}
+                <div className="card">
+                    <div className="card-header"><h3>📄 Cover Letters</h3></div>
+                    <div className="card-body">
+                        <p style={{fontSize:"13px",color:"var(--text-secondary)",marginBottom:"14px"}}>
+                            Create cover letter DOCX files from the template and convert to PDF.
+                            {status.missingCoverLetters > 0 && <strong style={{color:"var(--red)"}}> {status.missingCoverLetters} donors missing cover letters.</strong>}
+                        </p>
+                        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => runCoverLetters("missing")} disabled={!!loading}>
+                                {loading === "cl-missing" ? <span className="spinner dark" /> : "📝"} Create Missing Only
+                            </button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => runCoverLetters("all")} disabled={!!loading}>
+                                {loading === "cl-all" ? <span className="spinner dark" /> : "📝"} Recreate All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Merge Stats */}
+                <div className="card">
+                    <div className="card-header"><h3>📊 Merge Stats</h3></div>
+                    <div className="card-body">
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px",textAlign:"center"}}>
+                            <div><div style={{fontFamily:"var(--font-mono)",fontSize:"24px",fontWeight:500,color:"var(--green)"}}>{status.ready}</div><div style={{fontSize:"11px",color:"var(--text-secondary)",textTransform:"uppercase"}}>Ready</div></div>
+                            <div><div style={{fontFamily:"var(--font-mono)",fontSize:"24px",fontWeight:500,color:"var(--amber)"}}>{prevMergedCount || 0}</div><div style={{fontSize:"11px",color:"var(--text-secondary)",textTransform:"uppercase"}}>Previously Merged</div></div>
+                            <div><div style={{fontFamily:"var(--font-mono)",fontSize:"24px",fontWeight:500}}>{status.total}</div><div style={{fontSize:"11px",color:"var(--text-secondary)",textTransform:"uppercase"}}>Total Donors</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Merge Options */}
+            <div className="page-header" style={{marginBottom:"16px"}}><h2 style={{fontSize:"22px"}}>Merge Options</h2></div>
+
+            <div className="merge-option">
+                <h4>🟢 Merge Ready — Fresh Only</h4>
+                <p>Merge only donors that are fully ready AND have not been included in any previous merge batch. Creates a new timestamped folder.</p>
+                <button className="btn btn-primary" onClick={() => runMerge("ready", { freshOnly: true })} disabled={!!loading}>
+                    {loading === "ready" ? <span className="spinner" /> : "📦"} Merge Fresh Ready Donors
+                </button>
+            </div>
+
+            <div className="merge-option">
+                <h4>🔄 Merge Ready — All (Re-merge)</h4>
+                <p>Merge all ready donors including previously merged ones. Useful for regenerating the full output.</p>
+                <button className="btn btn-secondary" onClick={() => runMerge("ready", { freshOnly: false })} disabled={!!loading}>
+                    {loading === "ready" ? <span className="spinner dark" /> : "🔄"} Re-merge All Ready
+                </button>
+            </div>
+
+            <div className="merge-option">
+                <h4>⚠️ Merge All Donors — Fresh Only</h4>
+                <p>Merge every donor that has at least some files, regardless of readiness. Excludes previously merged. Reports may be incomplete.</p>
+                <button className="btn btn-secondary" onClick={() => runMerge("all", { freshOnly: true })} disabled={!!loading}>
+                    {loading === "all" ? <span className="spinner dark" /> : "⚠️"} Merge All Fresh
+                </button>
+            </div>
+
+            <div className="merge-option">
+                <h4>🔴 Merge All Donors — Force All</h4>
+                <p>Merge every donor with files, including previously merged. Full regeneration of all output.</p>
+                <button className="btn btn-danger btn-sm" onClick={() => runMerge("all", { freshOnly: false })} disabled={!!loading}>
+                    {loading === "all" ? <span className="spinner" /> : "🔴"} Force Merge Everything
+                </button>
+            </div>
+
+            {/* Merge History */}
+            <div style={{marginTop:"28px"}}>
+                <div className="page-header" style={{marginBottom:"16px"}}><h2 style={{fontSize:"22px"}}>Merge History</h2></div>
+                <div className="card">
+                    {history.length === 0
+                        ? <div style={{padding:"40px",textAlign:"center",color:"var(--text-secondary)",fontSize:"13.5px"}}>No merge batches yet</div>
+                        : history.map((batch, i) => (
+                            <div className="history-item" key={i}>
+                                <div>
+                                    <div className="h-label">{batch.folder}</div>
+                                    <div className="h-meta">
+                                        {batch.label && <span>{batch.label} · </span>}
+                                        {new Date(batch.timestamp).toLocaleString()}
+                                        {batch.errors && batch.errors.length > 0 && <span style={{color:"var(--red)"}}> · {batch.errors.length} error(s)</span>}
+                                    </div>
+                                </div>
+                                <div className="h-count">{batch.count}</div>
+                            </div>
+                        ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Config Page ───────────────────────────────────────────────────────────
+function ConfigPage({ status, onConfigSave, onReset, showToast }) {
+    const [config, setConfig] = useState({
+        coverSheetFile: "", extraGiftFile: "", coverLetterDir: "",
+        reportsDir: "", outputDir: "", templatePath: "",
+    });
+    const [saved, setSaved] = useState(false);
+    const [history, setHistory] = useState([]);
+    const [showHistory, setShowHistory] = useState(false);
+    const [picking, setPicking] = useState(null);
+
+    useEffect(() => {
+        api("/config").then(setConfig);
+        api("/config/history").then(h => setHistory(h || []));
+    }, []);
+
+    const handleSave = async () => {
+        await onConfigSave(config);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        api("/config/history").then(h => setHistory(h || []));
+    };
+
+    const pickFile = async (key, title, filetypes) => {
+        setPicking(key);
+        try {
+            const res = await api("/pick-file", { method: "POST", body: { title, filetypes } });
+            if (res.path) setConfig(c => ({ ...c, [key]: res.path }));
+        } catch (e) { showToast("Could not open file dialog", "error"); }
+        setPicking(null);
+    };
+
+    const pickFolder = async (key, title) => {
+        setPicking(key);
+        try {
+            const res = await api("/pick-folder", { method: "POST", body: { title } });
+            if (res.path) setConfig(c => ({ ...c, [key]: res.path }));
+        } catch (e) { showToast("Could not open folder dialog", "error"); }
+        setPicking(null);
+    };
+
+    const restoreFromHistory = async (idx) => {
+        const res = await api("/config/restore", { method: "POST", body: { index: idx } });
+        if (res.ok) {
+            setConfig(res.config);
+            showToast("Configuration restored");
+            setShowHistory(false);
+        }
+    };
+
+    const fields = [
+        { key: "coverSheetFile", label: "Cover Sheet Spreadsheet", type: "file", filetypes: [["Excel files", "*.xlsx *.xls"]] },
+        { key: "extraGiftFile", label: "Extra Gift Report Spreadsheet", type: "file", filetypes: [["Excel files", "*.xlsx *.xls"]] },
+        { key: "templatePath", label: "Cover Sheet Template (.docx)", type: "file", filetypes: [["Word documents", "*.docx"]] },
+        { key: "coverLetterDir", label: "Cover Letters Directory", type: "folder" },
+        { key: "reportsDir", label: "Reports Directory", type: "folder" },
+        { key: "outputDir", label: "Merge Output Directory", type: "folder" },
+    ];
+
+    return (
+        <div>
+            <div className="page-header"><h2>Configuration</h2><p>Set file paths for the quarterly report pipeline</p></div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:"20px",alignItems:"start"}}>
+                <div className="config-panel">
+                    {fields.map(f => (
+                        <div className="config-field" key={f.key}>
+                            <label>{f.label}</label>
+                            <div className="input-row">
+                                <input
+                                    type="text"
+                                    value={config[f.key] || ""}
+                                    placeholder={`Select ${f.type === "file" ? "a file" : "a folder"}…`}
+                                    onChange={e => setConfig({ ...config, [f.key]: e.target.value })}
+                                />
+                                <button
+                                    className="browse-btn"
+                                    disabled={picking === f.key}
+                                    onClick={() => f.type === "file"
+                                        ? pickFile(f.key, f.label, f.filetypes)
+                                        : pickFolder(f.key, f.label)
+                                    }
+                                >
+                                    {picking === f.key
+                                        ? <span className="spinner dark" />
+                                        : (f.type === "file" ? "📁" : "📂")}
+                                    Browse
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                        <button className="btn btn-primary" onClick={handleSave}>
+                            {saved ? "✓ Saved" : "Save Configuration"}
+                        </button>
+                        <button className="btn btn-danger" onClick={onReset} style={{ marginLeft: "auto" }}>Reset All Data</button>
+                    </div>
+                </div>
+
+                {/* Config History */}
+                <div className="card">
+                    <div className="card-header" style={{cursor:"pointer"}} onClick={() => setShowHistory(!showHistory)}>
+                        <h3>🕘 Previous Configs</h3>
+                        <span style={{fontSize:"12px",color:"var(--text-secondary)"}}>{history.length} saved</span>
+                    </div>
+                    {(showHistory || true) && (
+                        <div className="scrollable" style={{maxHeight:"500px"}}>
+                            {history.length === 0
+                                ? <div style={{padding:"20px",textAlign:"center",color:"var(--text-secondary)",fontSize:"13px"}}>No saved configurations yet</div>
+                                : [...history].reverse().map((entry, i) => {
+                                    const realIdx = history.length - 1 - i;
+                                    const ts = new Date(entry.timestamp);
+                                    const anyFile = entry.coverSheetFile || entry.reportsDir || "";
+                                    const shortPath = anyFile.split(/[/\\]/).slice(-2).join("/");
+                                    return (
+                                        <div className="config-history-item" key={i} onClick={() => restoreFromHistory(realIdx)}>
+                                            <div className="ch-ts">{ts.toLocaleDateString()} {ts.toLocaleTimeString()}</div>
+                                            <div style={{marginTop:"3px",fontWeight:500,fontSize:"12.5px"}}>{shortPath || "—"}</div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── App Root ──────────────────────────────────────────────────────────────
+function App() {
+    const [page, setPage] = useState("dashboard");
+    const [status, setStatus] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [toast, setToast] = useState(null);
+
+    const showToast = (message, type = "success") => setToast({ message, type });
+
+    const refreshStatus = useCallback(async () => {
+        try { setStatus(await api("/status")); }
+        catch { showToast("Cannot connect to server", "error"); }
+    }, []);
+
+    useEffect(() => { refreshStatus(); }, [refreshStatus]);
+
+    const runStep = async (step) => {
+        setLoading(true);
+        try {
+            const data = await api(`/${step}`, { method: "POST" });
+            if (data.ok) { showToast(`${step.replace(/-/g, " ")} completed`); await refreshStatus(); }
+            else showToast(data.error || "Step failed", "error");
+        } catch (e) { showToast(e.message, "error"); }
+        setLoading(false);
+    };
+
+    const handleConfigSave = async (config) => {
+        await api("/config", { method: "POST", body: config });
+        await refreshStatus();
+    };
+
+    const handleReset = async () => {
+        await api("/reset", { method: "POST" });
+        await refreshStatus();
+        showToast("All data reset");
+    };
+
+    return (
+        <div className="app-layout">
+            <Sidebar page={page} setPage={setPage} status={status} onRunStep={runStep} loading={loading} />
+            <div className="main-content">
+                {page === "dashboard" && <DashboardPage status={status} />}
+                {page === "donors" && <DonorsPage status={status} showToast={showToast} refreshStatus={refreshStatus} />}
+                {page === "issues" && <IssuesPage status={status} />}
+                {page === "merge" && <MergePage status={status} showToast={showToast} refreshStatus={refreshStatus} />}
+                {page === "config" && <ConfigPage status={status} onConfigSave={handleConfigSave} onReset={handleReset} showToast={showToast} />}
+            </div>
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
