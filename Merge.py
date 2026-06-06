@@ -31,26 +31,38 @@ def _validate_pdf(path: str) -> tuple[bool, str]:
     return True, ""
 
 class Preacher:
-    def __init__(self,pNum,pName):
+    def __init__(self,pNum:str,pName:str):
         self.pNum = pNum
         self.pName = pName
         self.note = ""
         self.report = ""
+        self.additonal:list[str] = []
         self.noteNecessary = False
+
+        if self.pNum.endswith("c"):
+            self.type = "child"
+        elif self.pNum.endswith("w"):
+            self.type = "widow"
+        else:
+            self.type = "default"
+
     def enforce(self):
         self.noteNecessary = True
+    
     def ready(self)->bool:
-        return (not self.noteNecessary or self.note!="") and (self.report!="")   
+        return ((not self.noteNecessary or self.note!="") 
+                and (self.report!="")
+                ) 
     def getFiles(self):
-        files = [self.report]
-        if self.noteNecessary:
-            files.append(self.note)
-        return [file for file in files if file!='']         
+        files = [self.report, self.note]
+        return [file for file in files if file!=""]         
+    
     def display(self):
         print()
         print("***Preacher Printing***")
         print("Name:",self.pName)
         print("Preacher Number:",self.pNum)
+        print("Preacher Type:",self.type)
         print("Report:",self.report)
         print("TY note necessary:",self.noteNecessary)
         print("TY note:", self.note)
@@ -176,7 +188,16 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
             donors[aNum] = Donor(**row)
         else:
             donors[aNum].addPreacher(str(row["pNum"]), str(row["pName"]))
-    
+
+    # For every child preacher (pNum ending in "c"), ensure the donor also has
+    # a placeholder for the base preacher so addReports can assign its report.
+    for donor in donors.values():
+        for _, preacher in donor.preachers.items():
+            if preacher.type == "child":
+                base_pNum = preacher.pNum[:-1]
+                if base_pNum not in donor.preachers:
+                    donor.preachers[base_pNum] = Preacher(base_pNum, f"{preacher.pName} Guardian")
+
     return donors
 
 def findDonor(*, eNum=None, eName=None, aNum=None, donors=None) -> Donor | None:
