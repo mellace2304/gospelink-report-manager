@@ -710,6 +710,8 @@ def open_browser():
 if __name__ == "__main__":
     print("\n  Gospelink Report Manager")
     print("  http://localhost:5000\n")
-    if not os.environ.get("WERKZEUG_RUN_MAIN"):
+    is_frozen = getattr(sys, 'frozen', False)
+    debug = not is_frozen
+    if not debug or not os.environ.get("WERKZEUG_RUN_MAIN"):
         threading.Timer(1.5, open_browser).start()
-    app.run(debug=True, port=5000)
+    app.run(debug=debug, use_reloader=debug, port=5000)
