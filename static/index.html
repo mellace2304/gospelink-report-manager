@@ -188,6 +188,47 @@ function Toast({ message, type, onClose }) {
     return <div className={`toast ${type}`}>{message}</div>;
 }
 
+// Update Banner
+
+function UpdateBanner() {
+    const [update, setUpdate] = useState(null);
+    const [applying, setApplying] = useState(false);
+
+    useEffect(() => {
+        api("/check-update").then(d => {
+            if (d.updateAvailable) setUpdate(d);
+        }).catch(() => {});
+    }, []);
+
+    if (!update) return null;
+
+    const applyUpdate = async () => {
+        setApplying(true);
+        await api("/apply-update", { 
+            method: "POST", 
+            body: { url: update.downloadUrl } 
+        });
+        // app will relaunch; this tab becomes dead
+    };
+
+    return (
+        <div style={{
+            padding: "12px 16px",
+            background: "rgba(184,134,11,0.15)",
+            borderTop: "1px solid rgba(184,134,11,0.2)",
+            marginTop: "auto"
+        }}>
+            <div style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 600 }}>
+                Update available: v{update.latest}
+            </div>
+            <button className="step-btn primary" style={{ marginTop: "6px" }}
+                    onClick={applyUpdate} disabled={applying}>
+                {applying ? <span className="spinner" /> : "⬆️"} Install & Restart
+            </button>
+        </div>
+    );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────
 function Sidebar({ page, setPage, status, onRunStep, loading }) {
     const steps = [
@@ -241,6 +282,7 @@ function Sidebar({ page, setPage, status, onRunStep, loading }) {
                     </div>
                 </div>
             )}
+            <UpdateBanner />
         </div>
     );
 }
@@ -788,6 +830,8 @@ function ConfigPage({ status, onConfigSave, onReset, showToast }) {
         </div>
     );
 }
+
+
 
 // ── App Root ──────────────────────────────────────────────────────────────
 function App() {
