@@ -191,7 +191,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.5.3"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])
@@ -302,6 +302,7 @@ def get_status():
     missing_ty = sum(1 for d in donors.values() for p in d.preachers.values() if p.noteNecessary and p.note == "")
 
     return jsonify({
+        "version": APP_VERSION,
         "loaded": state["loaded"],
         "stepsCompleted": state["steps_completed"],
         "total": total,

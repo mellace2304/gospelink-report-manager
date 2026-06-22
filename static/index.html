@@ -244,7 +244,7 @@ function Sidebar({ page, setPage, status, onRunStep, loading }) {
         <div className="sidebar">
             <div className="sidebar-header">
                 <h1>Gospelink</h1>
-                <div className="quarter-badge">REPORT MANAGER</div>
+                <div className="quarter-badge">REPORT MANAGER{status?.version && ` · v${status.version}`}</div>
             </div>
             <div className="sidebar-section">
                 <div className="sidebar-section-title">Navigation</div>
