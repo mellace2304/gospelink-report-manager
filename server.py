@@ -12,13 +12,13 @@ import traceback
 from datetime import datetime
 import webbrowser
 import threading
-import sys
-
+import urllib.request, tempfile, subprocess, sys
+    
 from Merge import (
-    Donor, Preacher, getDonors, findDonor,
+    Donor, Preacher, getDonors,
     enforceTY, addReports, assignCoverLetters,
-    mergeDonors, merge, createCoverLetter,
-    fill_template, docx_to_pdf
+    merge, createCoverLetter,
+    docx_to_pdf
 )
 
 app = Flask(__name__, static_folder="static")
@@ -190,6 +190,61 @@ def pick_folder():
     return jsonify({"path": path})
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
+
+APP_VERSION = "1.5.0"
+GITHUB_REPO = "mellace2304/gospelink-report-manager"
+
+@app.route("/api/check-update", methods=["GET"])
+def check_update():
+    try:
+        import urllib.request, json
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"User-Agent": "Gospelink"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+        latest = data["tag_name"].lstrip("v")
+        asset = next((a for a in data["assets"] if a["name"].endswith(".exe")), None)
+        download_url = asset["browser_download_url"] if asset else None
+        return jsonify({
+            "current": APP_VERSION,
+            "latest": latest,
+            "updateAvailable": latest != APP_VERSION and download_url is not None,
+            "downloadUrl": download_url,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "current": APP_VERSION})
+
+@app.route("/api/apply-update", methods=["POST"])
+def apply_update():
+    """Download new exe and launch a helper script to swap it, then exit."""
+    data = request.json or {}
+    url = data.get("url")
+    if not url:
+        return jsonify({"ok": False, "error": "No URL provided"}), 400
+    
+    exe_path = sys.executable
+    new_exe = exe_path + ".new"
+    
+    # Download the update
+    urllib.request.urlretrieve(url, new_exe)
+    
+    # Write a tiny batch script that waits for this process to exit,
+    # swaps the files, then relaunches
+    bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat", mode="w")
+    bat.write(f"""@echo off
+    timeout /t 2 /nobreak >nul
+    move /y "{new_exe}" "{exe_path}"
+    start "" "{exe_path}"
+    del "%~f0"
+    """)
+    bat.close()
+    
+    subprocess.Popen(["cmd", "/c", bat.name], 
+                     creationflags=subprocess.CREATE_NO_WINDOW)
+    
+    # Shut down Flask — the bat script will relaunch the app
+    os.kill(os.getpid(), 9)
+    return jsonify({"ok": True})
 
 @app.route("/")
 def index():
