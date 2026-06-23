@@ -191,7 +191,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.3"
+APP_VERSION = "1.5.4"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])

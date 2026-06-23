@@ -75,7 +75,6 @@ class Preacher:
         return reasons
         
 class Donor:
-    
     def __init__(self, pNum = "", pName = "", eNum = "", eName = "", street = "", city = "", state = "", zip = "", email = "",QReport="", aNum = "", *args, **kwargs):
         self.eNum = eNum
         if "\n" in eName:
@@ -192,11 +191,15 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
     # For every child preacher (pNum ending in "c"), ensure the donor also has
     # a placeholder for the base preacher so addReports can assign its report.
     for donor in donors.values():
-        for _, preacher in donor.preachers.items():
-            if preacher.type == "child":
-                base_pNum = preacher.pNum[:-1]
-                if base_pNum not in donor.preachers:
-                    donor.preachers[base_pNum] = Preacher(base_pNum, f"{preacher.pName} Guardian")
+        children_nums = [preacher.pNum[:-1] for _, preacher in donor.preachers.items() if preacher.type == "child"]
+        for num in children_nums:
+            if num not in donor.preachers:
+                donor.preachers[num] = Preacher(num, f"{num} Guardian")
+        # for _, preacher in donor.preachers.items():
+        #     if preacher.type == "child":
+        #         base_pNum = preacher.pNum[:-1]
+        #         if base_pNum not in donor.preachers:
+        #             donor.preachers[base_pNum] = Preacher(base_pNum, f"{preacher.pName} Guardian")
 
     return donors
 
