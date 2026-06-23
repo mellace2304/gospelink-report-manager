@@ -76,7 +76,7 @@ class Preacher:
         
 class Donor:
     
-    def __init__(self, pNum = "", pName = "", eNum = "", eName = "", street = "", city = "", state = "", zip = "", email = "",QReport="", aNum = ""):
+    def __init__(self, pNum = "", pName = "", eNum = "", eName = "", street = "", city = "", state = "", zip = "", email = "",QReport="", aNum = "", *args, **kwargs):
         self.eNum = eNum
         if "\n" in eName:
             self.eName = eName.split("\n")[0]
