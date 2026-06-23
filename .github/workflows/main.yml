@@ -17,13 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - run: pip install pyinstaller==6.20.0 flask flask-cors pandas openpyxl pymupdf python-docx pywin32
-      - name: Diagnose Merge module presence
-        run: |
-          Get-Location
-          Get-ChildItem -Name *.py
-          python -c "import Merge; print('Merge import OK ->', Merge.__file__)"
+          python-version: '3.12'   # 3.12+ required: Merge.py uses PEP 701 f-strings (backslash in expression), a SyntaxError on 3.11
+      - run: pip install pyinstaller flask flask-cors pandas openpyxl pymupdf python-docx pywin32
       - run: pyinstaller --onefile --name Gospelink --add-data "static;static" --paths . --hidden-import win32com --hidden-import win32com.client --collect-all pywin32 --collect-all fitz --icon=icon.ico server.py
       - name: Upload artifact (every build)
         uses: actions/upload-artifact@v4
