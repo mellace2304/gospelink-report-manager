@@ -227,9 +227,7 @@ def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> None:
         "Preacher Name": "pName",
         "Explanation": "eNum"
     })[["eNum","eName","Amo","pNum"]].dropna()
-    tempsheet1["eNum"] = tempsheet1["eNum"].astype(int)
-    tempsheet1["pNum"] = tempsheet1["pNum"].astype(int)
-
+    
     tempsheet2 = pd.read_excel(extraGiftFile,sheet_name="DGR")
     tempsheet2 = tempsheet2.rename(columns={
         "Actual Name": "eName",
@@ -237,9 +235,6 @@ def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> None:
         "FUNDS_NAME": "pNum",
         "First 2": "eNum"
     })[["eNum","eName","Amo","pNum"]].dropna()
-    tempsheet2["eNum"] = tempsheet2["eNum"].astype(int)
-    tempsheet2["pNum"] = tempsheet2["pNum"].astype(int)
-
 
     giftDF = pd.concat([tempsheet1,tempsheet2],ignore_index=True)
     giftDF.columns =["eNum","eName","Amo","pNum"]
