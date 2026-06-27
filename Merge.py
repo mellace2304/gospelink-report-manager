@@ -6,7 +6,6 @@ from pathlib import Path
 import time
 from docx.oxml.ns import qn
 from docx.oxml.parser import OxmlElement
-from copy import deepcopy
 import pythoncom
 import win32com.client
 from collections import defaultdict
@@ -177,6 +176,7 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
                     
                     )
     coverSheetDF["street"] = coverSheetDF["street"].str.replace("\n",' ')
+    coverSheetDF["eName"] = coverSheetDF["eName"].str.replace("\n",' ')
 
     donors = {}
     for _, row in coverSheetDF.iterrows():
@@ -219,26 +219,12 @@ def findDonor(*, eNum=None, eName=None, aNum=None, donors=None) -> Donor | None:
 
 def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> None:
     # Get data from both sheets, rename columns, and concatenate into one DataFrame
-    tempsheet1 = pd.read_excel(extraGiftFile,sheet_name="Spons Xtra")
-    tempsheet1 = tempsheet1.rename(columns={
-        "Actual Name": "eName",
-        "Gross Amt": "Amo",
-        "Prchr ID": "pNum",
-        "Preacher Name": "pName",
-        "Explanation": "eNum"
-    })[["eNum","eName","Amo","pNum"]].dropna()
+    giftDF = pd.read_excel(extraGiftFile,sheet_name="Spons Xtra")
+    giftDF = giftDF.rename(columns={  # ID	Name	Amount	Donor #	Donor Name
+        "ID": "pNum",
+        "Donor #": "eNum"
+    })[["eNum","pNum"]].dropna().astype(str)
     
-    tempsheet2 = pd.read_excel(extraGiftFile,sheet_name="DGR")
-    tempsheet2 = tempsheet2.rename(columns={
-        "Actual Name": "eName",
-        "Amt to Send": "Amo",
-        "FUNDS_NAME": "pNum",
-        "First 2": "eNum"
-    })[["eNum","eName","Amo","pNum"]].dropna()
-
-    giftDF = pd.concat([tempsheet1,tempsheet2],ignore_index=True)
-    giftDF.columns =["eNum","eName","Amo","pNum"]
-    giftDF = giftDF.astype(str)
     
     donors_by_eNum = {d.eNum: d for d in donors.values() if d.eNum}
     sponsorBlacklist = ["21956","20325","1940","1287","1565","1787","3548","3628","3990","5705","7608","604110"]
@@ -332,128 +318,118 @@ def mergeDonors(donors:list[Donor],output_path):
         merge(files, path)
 
 
-def fill_template(input_path, output_path, replacements):
+def fill_template(input_path, output_path, replacements:dict):
     """
-    Replace specified phrases/keywords in a DOCX file with new text.
-    Handles cases where placeholders are split across multiple runs.
-    Also handles text in text boxes and shapes.
-    
+    Replace placeholder text in a DOCX file while preserving formatting.
+
+    Placeholders may be split across several runs (e.g. «Envelope_Name» is
+    stored as the runs « | Envelope_Name | »). For this template they only
+    ever appear in plain body paragraphs or in table cells, so those are the
+    only locations scanned.
+
+    The replacement is done in place at the <w:t> (text node) level: runs are
+    never removed or rebuilt, so run formatting and non-text run content such
+    as tabs (<w:tab/>), line breaks and drawings are left untouched. A value
+    containing '\\n' is rendered as line breaks within its run.
+
     Args:
-        input_path (str): Path to the input DOCX file
-        output_path (str): Path where the modified DOCX will be saved
-        replacements (dict): Dictionary mapping old text to new text
-                           Example: {'«Envelope_Name»': 'John Doe'}
-    
-    Returns:
-        str: Path to the output file
+        input_path (str): Path to the input DOCX file.
+        output_path (str): Path where the modified DOCX will be saved.
+        replacements (dict): Mapping of placeholder text -> replacement text,
+                             e.g. {'«Envelope_Name»': 'John Doe'}.
     """
     doc = Document(input_path)
-    
-    def get_paragraph_text(para_element):
-        """Get full text from a paragraph element."""
-        runs = para_element.findall(qn('w:r'))
-        text = ''
-        for run in runs:
-            t_elements = run.findall(qn('w:t'))
-            for t in t_elements:
-                if t.text:
-                    text += t.text
-        return text
-    
-    def replace_in_paragraph_element(para_element):
-        """Replace text in a paragraph element (works with both regular and textbox paragraphs)."""
-        full_text = get_paragraph_text(para_element)
-        
-        # Check if any replacement is needed
-        needs_replacement = False
-        for old_text in replacements.keys():
-            if old_text in full_text:
-                needs_replacement = True
-                break
-        
-        if not needs_replacement:
+
+    def text_nodes(para_element):
+        """The <w:t> nodes of a paragraph's direct runs, in document order.
+
+        Only direct-child runs are inspected so that nested content (e.g. a
+        text box anchored inside the paragraph) is never modified.
+        """
+        return [t
+                for run in para_element.findall(qn('w:r'))
+                for t in run.findall(qn('w:t'))]
+
+    def write_value(t_elem, value):
+        """Set a <w:t>'s text to value, expanding '\\n' into <w:br> breaks.
+
+        Extra lines are inserted as siblings inside the same run so they keep
+        the run's formatting.
+        """
+        t_elem.set(qn('xml:space'), 'preserve')
+        if '\n' not in value:
+            t_elem.text = value
             return
-        
-        # Perform all replacements
-        new_text = full_text
-        for old_text, replacement in replacements.items():
-            new_text = new_text.replace(old_text, replacement)
-        
-        if new_text == full_text:
-            return
-        
-        # Get the first run's formatting
-        runs = para_element.findall(qn('w:r'))
-        first_run_props = None
-        if runs:
-            first_run_props = runs[0].find(qn('w:rPr'))
-        
-        # Remove all existing runs
-        for run in runs:
-            para_element.remove(run)
-        
-        # Split text by newlines and create runs/breaks
-        text_parts = new_text.split('\n')
-        for i, part in enumerate(text_parts):
-            # Create a new run with replaced text
-            r = OxmlElement('w:r')
-            
-            # Copy formatting from first run if it existed
-            if first_run_props is not None:
-                rPr = deepcopy(first_run_props)
-                r.append(rPr)
-            
-            # Add the text
-            if part:  # Only add text if part is not empty
-                t = OxmlElement('w:t')
-                t.set(qn('xml:space'), 'preserve')
-                t.text = part
-                r.append(t)
-            
-            # Add run to paragraph
-            para_element.append(r)
-            
-            # Add line break if not the last part
-            if i < len(text_parts) - 1:
-                br_run = OxmlElement('w:r')
-                if first_run_props is not None:
-                    rPr = deepcopy(first_run_props)
-                    br_run.append(rPr)
-                br = OxmlElement('w:br')
-                br_run.append(br)
-                para_element.append(br_run)
-    
-    def replace_in_paragraph(paragraph):
-        """Replace text in a paragraph object."""
-        replace_in_paragraph_element(paragraph._element)
-    
-    # Process all paragraphs in the document body
+
+        run = t_elem.getparent()
+        insert_at = list(run).index(t_elem)
+        lines = value.split('\n')
+        t_elem.text = lines[0]
+        for offset, line in enumerate(lines[1:], start=1):
+            br = OxmlElement('w:br')
+            nt = OxmlElement('w:t')
+            nt.set(qn('xml:space'), 'preserve')
+            nt.text = line
+            run.insert(insert_at + (offset * 2) - 1, br)
+            run.insert(insert_at + (offset * 2), nt)
+
+    def replace_in_paragraph(para_element):
+        """Replace every placeholder occurrence in a single paragraph."""
+        # One replacement per pass; re-scan afterwards so placeholders that
+        # span runs (and repeated placeholders) are all resolved.
+        while True:
+            nodes = text_nodes(para_element)
+            if not nodes:
+                return
+            texts = [t.text or '' for t in nodes]
+            full = ''.join(texts)
+
+            # Earliest-starting placeholder present in this paragraph.
+            match = None
+            for key in replacements:
+                pos = full.find(key)
+                if pos != -1 and (match is None or pos < match[0]):
+                    match = (pos, key)
+            if match is None:
+                return
+
+            start, key = match
+            end = start + len(key)
+            value = replacements[key]
+
+            # Character span [node_start, node_end) covered by each <w:t>.
+            bounds = []
+            cursor = 0
+            for txt in texts:
+                bounds.append((cursor, cursor + len(txt)))
+                cursor += len(txt)
+
+            # Nodes that the placeholder overlaps.
+            covered = [i for i, (s, e) in enumerate(bounds)
+                       if s < end and e > start]
+            first, last = covered[0], covered[-1]
+
+            prefix = texts[first][:start - bounds[first][0]]
+            suffix = texts[last][end - bounds[last][0]:]
+
+            if first == last:
+                write_value(nodes[first], prefix + value + suffix)
+            else:
+                write_value(nodes[first], prefix + value)
+                for i in covered[1:-1]:
+                    nodes[i].text = ''
+                nodes[last].text = suffix
+                nodes[last].set(qn('xml:space'), 'preserve')
+
     for paragraph in doc.paragraphs:
-        replace_in_paragraph(paragraph)
-    
-    # Process tables
+        replace_in_paragraph(paragraph._element)
+
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
-                    replace_in_paragraph(paragraph)
-    
-    # Process headers and footers
-    for section in doc.sections:
-        for paragraph in section.header.paragraphs:
-            replace_in_paragraph(paragraph)
-        for paragraph in section.footer.paragraphs:
-            replace_in_paragraph(paragraph)
-    
-    # Process text boxes
-    body_element = doc.element.body
-    textboxes = body_element.findall('.//' + qn('w:txbxContent'))
-    for txbx in textboxes:
-        paras = txbx.findall('.//' + qn('w:p'))
-        for para_elem in paras:
-            replace_in_paragraph_element(para_elem)
-    
-    # Save the modified document
+                    replace_in_paragraph(paragraph._element)
+
     doc.save(output_path)
 
 
