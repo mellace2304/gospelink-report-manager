@@ -34,6 +34,7 @@ else:
 
 CONFIG_FILE = os.path.join(BASE_DIR, "gospelink_config.json")
 CONFIG_HISTORY_FILE = os.path.join(BASE_DIR, "gospelink_config_history.json")
+MERGE_HISTORY_FILE = os.path.join(BASE_DIR, "merged_donors.json")
 
 # ── Global State ──────────────────────────────────────────────────────────────
 state = {
@@ -121,12 +122,12 @@ def serialize_preacher(p: Preacher) -> dict:
     }
 
 
-def serialize_donor(d: Donor) -> dict:
+def serialize_donor(d: Donor, merge_history: dict = None) -> dict:
     preachers = {k: serialize_preacher(v) for k, v in d.preachers.items()}
+    entry = (merge_history or {}).get(d.aNum, {})
     return {
         "eNum": d.eNum,
         "eName": d.eName,
-        "additional": d.additional,
         "street": d.street,
         "city": d.city,
         "state": d.state,
@@ -140,6 +141,8 @@ def serialize_donor(d: Donor) -> dict:
         "ready": d.ready(),
         "reasons": d.reasons(),
         "fileCount": len(d.getFiles()),
+        "merged": bool(entry.get("merged", False)),
+        "mergedManual": bool(entry.get("manual", False)),
     }
 
 
@@ -498,6 +501,9 @@ def get_merge_folders(output_dir: str) -> list[str]:
 
 
 def get_previously_merged(output_dir: str) -> set[str]:
+    """Legacy detection: filenames found by scanning Merge_* folders/manifests
+    in the currently configured output dir. Kept as a fallback/migration
+    source — see get_merged_status()."""
     merged = set()
     for folder_name in get_merge_folders(output_dir):
         folder_path = os.path.join(output_dir, folder_name)
@@ -515,6 +521,48 @@ def get_previously_merged(output_dir: str) -> set[str]:
     return merged
 
 
+def load_merge_history() -> dict:
+    if os.path.exists(MERGE_HISTORY_FILE):
+        try:
+            with open(MERGE_HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_merge_history(history: dict):
+    with open(MERGE_HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+
+def get_merged_status(output_dir: str) -> dict:
+    """Authoritative aNum -> {merged, filename, timestamp, label, manual} map.
+    merged_donors.json is the source of truth. Only if the file has *never*
+    been created (first run after upgrading) is it seeded once from the
+    legacy Merge_* folder scan, so existing merge history isn't lost. Once
+    the file exists — even if intentionally emptied by a quarterly reset —
+    it is never re-derived from the folder scan again."""
+    if not os.path.exists(MERGE_HISTORY_FILE):
+        history = {}
+        if output_dir:
+            legacy_filenames = get_previously_merged(output_dir)
+            if legacy_filenames:
+                now_iso = datetime.now().isoformat()
+                for donor in state["donors"].values():
+                    if get_donor_filename(donor) in legacy_filenames:
+                        history[donor.aNum] = {
+                            "merged": True,
+                            "filename": get_donor_filename(donor),
+                            "timestamp": now_iso,
+                            "label": "Migrated from existing output folders",
+                            "manual": False,
+                        }
+        save_merge_history(history)
+        return history
+    return load_merge_history()
+
+
 def create_merge_batch(output_dir: str, donors_to_merge: list[Donor], label: str = "") -> dict:
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     folder_name = f"Merge_{ts}"
@@ -523,6 +571,8 @@ def create_merge_batch(output_dir: str, donors_to_merge: list[Donor], label: str
 
     merged_files = []
     errors = []
+    history = load_merge_history()
+    now_iso = datetime.now().isoformat()
     for donor in donors_to_merge:
         try:
             files = list(dict.fromkeys(donor.getFiles()))
@@ -532,11 +582,18 @@ def create_merge_batch(output_dir: str, donors_to_merge: list[Donor], label: str
             path = os.path.join(folder_path, filename)
             merge(files, path)
             merged_files.append(filename)
+            history[donor.aNum] = {
+                "merged": True,
+                "filename": filename,
+                "timestamp": now_iso,
+                "label": label,
+                "manual": False,
+            }
         except Exception as e:
             errors.append({"aNum": donor.aNum, "eNum": donor.eNum, "error": str(e)})
 
     manifest = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_iso,
         "label": label,
         "count": len(merged_files),
         "files": merged_files,
@@ -544,6 +601,9 @@ def create_merge_batch(output_dir: str, donors_to_merge: list[Donor], label: str
     }
     with open(os.path.join(folder_path, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
+
+    if merged_files:
+        save_merge_history(history)
 
     return {"folder": folder_name, "path": folder_path, "merged": len(merged_files), "errors": errors}
 
@@ -570,6 +630,16 @@ def merge_individual(aNum):
         path = os.path.join(output_dir, filename)
         merge(files, path)
 
+        history = load_merge_history()
+        history[donor.aNum] = {
+            "merged": True,
+            "filename": filename,
+            "timestamp": datetime.now().isoformat(),
+            "label": "Individual merge",
+            "manual": False,
+        }
+        save_merge_history(history)
+
         log(f"Merged individual: {donor.eName} -> {filename}")
         return jsonify({"ok": True, "file": filename, "path": path, "fileCount": len(files)})
     except Exception as e:
@@ -590,8 +660,8 @@ def merge_ready():
         fresh_only = data.get("freshOnly", True)
 
         if fresh_only:
-            previously_merged = get_previously_merged(output_dir)
-            targets = [d for d in ready if get_donor_filename(d) not in previously_merged]
+            merged_status = get_merged_status(output_dir)
+            targets = [d for d in ready if not merged_status.get(d.aNum, {}).get("merged")]
         else:
             targets = ready
 
@@ -621,8 +691,8 @@ def merge_all():
         fresh_only = data.get("freshOnly", True)
 
         if fresh_only:
-            previously_merged = get_previously_merged(output_dir)
-            targets = [d for d in all_donors if get_donor_filename(d) not in previously_merged]
+            merged_status = get_merged_status(output_dir)
+            targets = [d for d in all_donors if not merged_status.get(d.aNum, {}).get("merged")]
         else:
             targets = all_donors
 
@@ -667,6 +737,47 @@ def merge_history():
     return jsonify(list(reversed(batches)))
 
 
+@app.route("/api/donors/<aNum>/merged", methods=["POST"])
+def set_donor_merged(aNum):
+    try:
+        donor = state["donors"].get(aNum)
+        if not donor:
+            return jsonify({"ok": False, "error": "Donor not found"}), 404
+
+        data = request.json or {}
+        merged = bool(data.get("merged", True))
+
+        history = load_merge_history()
+        existing = history.get(aNum, {})
+        history[aNum] = {
+            "merged": merged,
+            "filename": existing.get("filename", get_donor_filename(donor)),
+            "timestamp": datetime.now().isoformat(),
+            "label": existing.get("label", "Manual override"),
+            "manual": True,
+        }
+        save_merge_history(history)
+
+        log(f"{'Marked' if merged else 'Unmarked'} as merged: {donor.eName} (A#{aNum})")
+        return jsonify({"ok": True, "donor": serialize_donor(donor, history)})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/merge-history/reset", methods=["POST"])
+def reset_merge_history():
+    try:
+        save_merge_history({})
+        if "merge" in state["steps_completed"]:
+            state["steps_completed"].remove("merge")
+        log("Merge history reset for new quarter")
+        return jsonify({"ok": True})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Routes: Donors / Issues ──────────────────────────────────────────────────
 
 @app.route("/api/donors", methods=["GET"])
@@ -677,13 +788,20 @@ def list_donors():
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 50))
 
+    merge_history = get_merged_status(state["config"]["outputDir"])
+
     candidates = []
     for d in state["donors"].values():
         if filter_status != "all":
             is_ready = d.ready()
+            is_merged = merge_history.get(d.aNum, {}).get("merged", False)
             if filter_status == "ready" and not is_ready:
                 continue
             if filter_status == "not_ready" and is_ready:
+                continue
+            if filter_status == "merged" and not is_merged:
+                continue
+            if filter_status == "not_merged" and is_merged:
                 continue
         if search:
             haystack = f"{d.eName} {d.eNum} {d.aNum} {d.email} ".lower()
@@ -706,7 +824,7 @@ def list_donors():
     page_slice = candidates[start:start + per_page]
 
     return jsonify({
-        "donors": [serialize_donor(d) for d in page_slice],
+        "donors": [serialize_donor(d, merge_history) for d in page_slice],
         "total": total,
         "page": page,
         "perPage": per_page,
@@ -717,7 +835,8 @@ def list_donors():
 @app.route("/api/donors/<aNum>", methods=["GET"])
 def get_donor(aNum):
     if aNum in state["donors"]:
-        return jsonify(serialize_donor(state["donors"][aNum]))
+        merge_history = get_merged_status(state["config"]["outputDir"])
+        return jsonify(serialize_donor(state["donors"][aNum], merge_history))
     return jsonify({"error": "Donor not found"}), 404
 
 

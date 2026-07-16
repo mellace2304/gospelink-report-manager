@@ -76,12 +76,11 @@ class Preacher:
 class Donor:
     def __init__(self, pNum = "", pName = "", eNum = "", eName = "", street = "", city = "", state = "", zip = "", email = "",QReport="", aNum = "", *args, **kwargs):
         self.eNum = eNum
-        if "\n" in eName:
-            self.eName = eName.split("\n")[0]
-            self.additional = eName.split("\n")[1]
-        else:
-            self.eName = eName
-            self.additional = ""
+        #if "\n" in eName:
+            #self.eName = eName.split("\n")[0]
+            #self.additional = eName.split("\n")[1]
+        #else:
+        self.eName = eName
         self.street = street
         self.city = city
         self.state = state
@@ -138,7 +137,6 @@ class Donor:
         print("Account Number:",self.aNum)
         print("Coverletter:", self.coverLetter)
         print("Extra Notes/Reports:", ", ".join(self.extra_notes))
-        print("Additional:",self.additional)
         for preacher in self.preachers.values():
             preacher.display()
     
@@ -176,8 +174,6 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
                     
                     )
     coverSheetDF["street"] = coverSheetDF["street"].str.replace("\n",' ')
-    coverSheetDF["eName"] = coverSheetDF["eName"].str.replace("\n",' ')
-
     donors = {}
     for _, row in coverSheetDF.iterrows():
         row = {str(k): v for k, v in row.fillna("").to_dict().items()}
@@ -455,7 +451,6 @@ def createCoverLetter(donor:Donor,output_path=".\\Data\\Output\\CoverLetters",te
     
     data = {
         "«Envelope_Name»": donor.eName,
-        "«Additional»": f"{'\n' if donor.additional!= '' else ''}{donor.additional}",
         "«Primary_Street»": donor.street,
         "«Primary_City»": donor.city,
         "«Primary_State»": donor.state,

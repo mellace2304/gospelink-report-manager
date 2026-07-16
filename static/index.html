@@ -20,6 +20,7 @@
             --red:#b8332b;--red-bg:#fce8e7;--red-border:#f0b8b5;
             --amber:#b8860b;--amber-bg:#fef5e0;--amber-border:#f0d88a;
             --blue:#2563eb;--blue-bg:#eff6ff;
+            --violet:#7c3aed;--violet-bg:#f3e8ff;--violet-border:#ddd6fe;
             --radius:8px;--radius-lg:12px;
             --shadow-sm:0 1px 2px rgba(44,40,37,0.06);--shadow:0 2px 8px rgba(44,40,37,0.08);
             --shadow-lg:0 4px 16px rgba(44,40,37,0.12);
@@ -91,6 +92,8 @@
         .status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
         .status-dot.ready{background:var(--green)}
         .status-dot.not-ready{background:var(--red)}
+        .status-badge.merged{background:var(--violet-bg);color:var(--violet)}
+        .status-badge.not-merged{background:transparent;color:var(--text-secondary);border:1px dashed var(--border)}
         .donor-detail{padding:0 16px 16px;animation:slideDown 0.2s ease}
         @keyframes slideDown{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
         .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
@@ -335,6 +338,7 @@ function DonorDetail({ donor, onAction, actionLoading }) {
                                 ? <span className="issue-tag ok">✓ Cover Letter</span>
                                 : <span className="issue-tag cover">Missing Cover Letter</span>}
                             {d.sendQuarterly && <span className="issue-tag ok" style={{ background: "var(--blue-bg)", color: "var(--blue)", borderColor: "#bfdbfe" }}>E-Mail Quarterly</span>}
+                            {d.merged && <span className="issue-tag ok" style={{ background: "var(--violet-bg)", color: "var(--violet)", borderColor: "var(--violet-border)" }}>✓ Merged{d.mergedManual ? " (manual)" : ""}</span>}
                         </div>
                     </div>
                     <div className="detail-actions">
@@ -349,6 +353,11 @@ function DonorDetail({ donor, onAction, actionLoading }) {
                                 disabled={actionLoading || d.fileCount === 0}
                                 onClick={(e) => { e.stopPropagation(); onAction("merge-individual", d.aNum); }}>
                             {actionLoading ? <span className="spinner" /> : "📦"} Merge This Donor
+                        </button>
+                        <button className="btn btn-secondary btn-sm"
+                                disabled={actionLoading}
+                                onClick={(e) => { e.stopPropagation(); onAction("toggle-merged", d.aNum, !d.merged); }}>
+                            {actionLoading ? <span className="spinner dark" /> : "🔖"} Mark as {d.merged ? "Not Merged" : "Merged"}
                         </button>
                     </div>
                 </div>
@@ -404,7 +413,7 @@ function DonorsPage({ status, showToast, refreshStatus }) {
         searchTimeout.current = setTimeout(() => { setSearch(val); setPage(1); }, 250);
     };
 
-    const handleAction = async (action, aNum) => {
+    const handleAction = async (action, aNum, extra) => {
         setActionLoading(true);
         try {
             if (action === "create-cl") {
@@ -413,8 +422,12 @@ function DonorsPage({ status, showToast, refreshStatus }) {
                 else showToast(res.error || "Failed", "error");
             } else if (action === "merge-individual") {
                 const res = await api(`/merge/individual/${aNum}`, { method: "POST" });
-                if (res.ok) showToast(`Merged → ${res.file}`);
+                if (res.ok) { showToast(`Merged → ${res.file}`); await fetchDonors(); await refreshStatus(); }
                 else showToast(res.error || "Merge failed", "error");
+            } else if (action === "toggle-merged") {
+                const res = await api(`/donors/${aNum}/merged`, { method: "POST", body: { merged: extra } });
+                if (res.ok) { showToast(extra ? "Marked as merged" : "Marked as not merged"); await fetchDonors(); await refreshStatus(); }
+                else showToast(res.error || "Failed", "error");
             }
         } catch (e) { showToast(e.message, "error"); }
         setActionLoading(false);
@@ -434,9 +447,9 @@ function DonorsPage({ status, showToast, refreshStatus }) {
                     <span className="search-icon">🔍</span>
                     <input type="text" placeholder="Search by name, envelope #, account #, preacher …" onChange={e => handleSearch(e.target.value)} />
                 </div>
-                {["all", "ready", "not_ready"].map(f => (
+                {["all", "ready", "not_ready", "merged", "not_merged"].map(f => (
                     <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => { setFilter(f); setPage(1); }}>
-                        {f === "all" ? "All" : f === "ready" ? "Ready" : "Not Ready"}
+                        {f === "all" ? "All" : f === "ready" ? "Ready" : f === "not_ready" ? "Not Ready" : f === "merged" ? "Merged" : "Not Merged"}
                     </button>
                 ))}
             </div>
@@ -444,6 +457,7 @@ function DonorsPage({ status, showToast, refreshStatus }) {
                 <table className="donor-table">
                     <thead><tr>
                         <th onClick={() => setSortBy("status")} style={{width:"90px"}}>Status</th>
+                        <th style={{width:"90px"}}>Merged</th>
                         <th onClick={() => setSortBy("eName")}>Envelope Name</th>
                         <th onClick={() => setSortBy("eNum")} style={{width:"100px"}}>Env #</th>
                         <th onClick={() => setSortBy("aNum")} style={{width:"100px"}}>Acct #</th>
@@ -461,6 +475,7 @@ function DonorsPage({ status, showToast, refreshStatus }) {
                             <React.Fragment key={d.aNum}>
                                 <tr className={isExp ? "expanded" : ""} onClick={() => setExpanded(isExp ? null : d.aNum)}>
                                     <td><span className={`status-badge ${d.ready ? "ready" : "not-ready"}`}><span className={`status-dot ${d.ready ? "ready" : "not-ready"}`} />{d.ready ? "Ready" : "Issues"}</span></td>
+                                    <td><span className={`status-badge ${d.merged ? "merged" : "not-merged"}`}>{d.merged ? "✓ Merged" : "—"}</span></td>
                                     <td style={{fontWeight:500}}>{d.eName}</td>
                                     <td><span style={{fontFamily:"var(--font-mono)",fontSize:"12.5px"}}>{d.eNum}</span></td>
                                     <td><span style={{fontFamily:"var(--font-mono)",fontSize:"12.5px"}}>{d.aNum}</span></td>
@@ -472,13 +487,13 @@ function DonorsPage({ status, showToast, refreshStatus }) {
                                             : <span style={{color:"var(--green)",fontSize:"14px"}}>✓</span>}
                                     </td>
                                 </tr>
-                                {isExp && <tr><td colSpan="7" style={{padding:0}}>
+                                {isExp && <tr><td colSpan="8" style={{padding:0}}>
                                     <DonorDetail donor={d} onAction={handleAction} actionLoading={actionLoading} />
                                 </td></tr>}
                             </React.Fragment>
                         );
                     })}
-                    {donors.length === 0 && <tr><td colSpan="7"><div className="empty-state" style={{padding:"40px"}}><p>No donors match your filters.</p></div></td></tr>}
+                    {donors.length === 0 && <tr><td colSpan="8"><div className="empty-state" style={{padding:"40px"}}><p>No donors match your filters.</p></div></td></tr>}
                     </tbody>
                 </table>
                 {totalPages > 1 && (
@@ -585,6 +600,17 @@ function MergePage({ status, showToast, refreshStatus }) {
         setLoading(null);
     };
 
+    const resetMergeHistory = async () => {
+        if (!window.confirm("Start a new quarter? This resets the app's merge tracking so every ready donor is treated as fresh again. It does NOT delete or move any files on disk.")) return;
+        setLoading("reset-history");
+        try {
+            const res = await api("/merge-history/reset", { method: "POST" });
+            if (res.ok) { showToast("Merge history reset for new quarter"); await loadHistory(); await refreshStatus(); }
+            else showToast(res.error || "Failed", "error");
+        } catch (e) { showToast(e.message, "error"); }
+        setLoading(null);
+    };
+
     const runCoverLetters = async (target) => {
         setLoading("cl-" + target);
         try {
@@ -679,7 +705,12 @@ function MergePage({ status, showToast, refreshStatus }) {
 
             {/* Merge History */}
             <div style={{marginTop:"28px"}}>
-                <div className="page-header" style={{marginBottom:"16px"}}><h2 style={{fontSize:"22px"}}>Merge History</h2></div>
+                <div className="page-header" style={{marginBottom:"16px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                    <div><h2 style={{fontSize:"22px"}}>Merge History</h2><p>Tracks which donors have already been merged, independent of the output folder</p></div>
+                    <button className="btn btn-secondary btn-sm" onClick={resetMergeHistory} disabled={!!loading}>
+                        {loading === "reset-history" ? <span className="spinner dark" /> : "🗓️"} Start New Quarter
+                    </button>
+                </div>
                 <div className="card">
                     {history.length === 0
                         ? <div style={{padding:"40px",textAlign:"center",color:"var(--text-secondary)",fontSize:"13.5px"}}>No merge batches yet</div>
