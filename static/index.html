@@ -573,13 +573,10 @@ function IssuesPage({ status }) {
 function MergePage({ status, showToast, refreshStatus }) {
     const [loading, setLoading] = useState(null);
     const [history, setHistory] = useState([]);
-    const [prevMergedCount, setPrevMergedCount] = useState(null);
 
     const loadHistory = async () => {
         const data = await api("/merge/history");
         setHistory(data || []);
-        const totalPrev = (data || []).reduce((acc, b) => acc + (b.count || 0), 0);
-        setPrevMergedCount(totalPrev);
     };
 
     useEffect(() => { if (status?.loaded) loadHistory(); }, [status]);
@@ -629,7 +626,8 @@ function MergePage({ status, showToast, refreshStatus }) {
         </div>
     );
 
-    const freshReady = status.ready - (prevMergedCount || 0);
+    const prevMergedCount = status.readyMerged || 0;
+    const freshReady = status.readyFresh ?? (status.ready - prevMergedCount);
 
     return (
         <div>
@@ -673,7 +671,8 @@ function MergePage({ status, showToast, refreshStatus }) {
 
             <div className="merge-option">
                 <h4>🟢 Merge Ready — Fresh Only</h4>
-                <p>Merge only donors that are fully ready AND have not been included in any previous merge batch. Creates a new timestamped folder.</p>
+                <p>Merge only donors that are fully ready AND have not been included in any previous merge batch. Creates a new timestamped folder.
+                    {" "}<strong>{freshReady}</strong> donor{freshReady === 1 ? "" : "s"} will be merged.</p>
                 <button className="btn btn-primary" onClick={() => runMerge("ready", { freshOnly: true })} disabled={!!loading}>
                     {loading === "ready" ? <span className="spinner" /> : "📦"} Merge Fresh Ready Donors
                 </button>
