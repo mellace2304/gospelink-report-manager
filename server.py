@@ -304,6 +304,18 @@ def get_status():
     missing_report = sum(1 for d in donors.values() for p in d.preachers.values() if p.report == "")
     missing_ty = sum(1 for d in donors.values() for p in d.preachers.values() if p.noteNecessary and p.note == "")
 
+    # Authoritative merged count — mirrors the same merged_donors.json lookup
+    # that /api/merge/ready and /api/merge/all use to decide what's "fresh",
+    # so this number always matches what a fresh-only merge will actually do.
+    # (Do not use the Merge_* folder/manifest scan here — individual merges
+    # and manual "mark as merged" toggles never create folders/manifests, so
+    # that scan undercounts and desyncs from the real fresh-only filter.)
+    merged_status = get_merged_status(state["config"]["outputDir"])
+    ready_merged = sum(
+        1 for d in donors.values()
+        if d.ready() and merged_status.get(d.aNum, {}).get("merged")
+    )
+
     return jsonify({
         "version": APP_VERSION,
         "loaded": state["loaded"],
@@ -311,6 +323,8 @@ def get_status():
         "total": total,
         "ready": ready,
         "notReady": total - ready,
+        "readyMerged": ready_merged,
+        "readyFresh": ready - ready_merged,
         "missingCoverLetters": missing_cover,
         "missingReports": missing_report,
         "missingTYNotes": missing_ty,
