@@ -12,7 +12,7 @@ import traceback
 from datetime import datetime
 import webbrowser
 import threading
-import urllib.request, tempfile, subprocess, sys
+import urllib.request, tempfile, subprocess, sys, shutil
     
 from Merge import (
     Donor, Preacher, getDonors,
@@ -194,7 +194,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.6"
+APP_VERSION = "1.5.7"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])
@@ -224,29 +224,60 @@ def apply_update():
     url = data.get("url")
     if not url:
         return jsonify({"ok": False, "error": "No URL provided"}), 400
-    
+    if not getattr(sys, "frozen", False):
+        return jsonify({"ok": False, "error": "Auto-update only works from the packaged Gospelink.exe"}), 400
+
     exe_path = sys.executable
     new_exe = exe_path + ".new"
-    
-    # Download the update
-    urllib.request.urlretrieve(url, new_exe)
-    
-    # Write a tiny batch script that waits for this process to exit,
-    # swaps the files, then relaunches
-    bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat", mode="w")
-    bat.write(f"""@echo off
-    timeout /t 2 /nobreak >nul
-    move /y "{new_exe}" "{exe_path}"
-    start "" "{exe_path}"
-    del "%~f0"
-    """)
-    bat.close()
-    
-    subprocess.Popen(["cmd", "/c", bat.name], 
-                     creationflags=subprocess.CREATE_NO_WINDOW)
-    
-    # Shut down Flask — the bat script will relaunch the app
-    os.kill(os.getpid(), 9)
+
+    # Download the update (with a timeout so a stalled connection can't hang forever)
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(url, headers={"User-Agent": "Gospelink"}), timeout=30
+        ) as r, open(new_exe, "wb") as f:
+            shutil.copyfileobj(r, f)
+        if os.path.getsize(new_exe) < 1_000_000:
+            raise RuntimeError("Downloaded file is too small to be valid")
+    except Exception as e:
+        try:
+            os.remove(new_exe)
+        except OSError:
+            pass
+        return jsonify({"ok": False, "error": f"Download failed: {e}"}), 500
+
+    # Helper batch script: retry the swap until the old exe is unlocked, then relaunch.
+    # (ping is used as the delay because `timeout` fails without a console.)
+    bat_path = os.path.join(tempfile.gettempdir(), "gospelink_update.bat")
+    lines = [
+        "@echo off",
+        "set tries=0",
+        ":retry",
+        "ping -n 3 127.0.0.1 >nul",
+        f'move /y "{new_exe}" "{exe_path}" >nul 2>&1',
+        "if not errorlevel 1 goto done",
+        "set /a tries+=1",
+        "if %tries% lss 30 goto retry",
+        "exit /b 1",
+        ":done",
+        f'start "" "{exe_path}"',
+        'del "%~f0"',
+    ]
+    with open(bat_path, "w", newline="") as bat:
+        bat.write("\r\n".join(lines) + "\r\n")
+
+    env = os.environ.copy()
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    subprocess.Popen(
+        ["cmd", "/c", bat_path],
+        env=env,
+        close_fds=True,
+        creationflags=subprocess.CREATE_NO_WINDOW
+        | subprocess.DETACHED_PROCESS
+        | subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+
+    # Reply first, then shut down so the browser isn't left hanging
+    threading.Timer(1.0, lambda: os._exit(0)).start()
     return jsonify({"ok": True})
 
 @app.route("/")

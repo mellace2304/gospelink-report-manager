@@ -207,11 +207,17 @@ function UpdateBanner() {
 
     const applyUpdate = async () => {
         setApplying(true);
-        await api("/apply-update", { 
-            method: "POST", 
-            body: { url: update.downloadUrl } 
-        });
-        // app will relaunch; this tab becomes dead
+        try {
+            const res = await api("/apply-update", { 
+                method: "POST", 
+                body: { url: update.downloadUrl } 
+            });
+            if (res && res.ok === false) throw new Error(res.error || "Update failed");
+            // app will relaunch; this tab becomes dead
+        } catch (e) {
+            setApplying(false);
+            alert("Update failed: " + e.message + "\nYou can download the latest Gospelink.exe from the GitHub releases page instead.");
+        }
     };
 
     return (
