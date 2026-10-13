@@ -18,7 +18,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'   # 3.12+ required: Merge.py uses PEP 701 f-strings (backslash in expression), a SyntaxError on 3.11
-      - run: pip install pyinstaller flask flask-cors pandas openpyxl pymupdf python-docx pywin32
+      - run: pip install pytest pyinstaller flask flask-cors pandas openpyxl pymupdf python-docx pywin32
+      - name: Run tests (a failure blocks the build and release)
+        run: python -m pytest tests -q
       - run: pyinstaller --onefile --name Gospelink --add-data "static;static" --paths . --hidden-import win32com --hidden-import win32com.client --collect-all pywin32 --collect-all fitz --icon=icon.ico server.py
       - name: Upload artifact (every build)
         uses: actions/upload-artifact@v4

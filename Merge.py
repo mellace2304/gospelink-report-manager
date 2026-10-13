@@ -293,8 +293,10 @@ def findDonor(*, eNum=None, eName=None, aNum=None, donors=None) -> Donor | None:
 def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> list[str]:
     """Flag preacher-donor combos that need a TY note. Returns donor #s not found in the cover sheet."""
     giftDF = _read_required_columns(extraGiftFile, "Spons Xtra", {  # ID	Name	Amount	Donor #	Donor Name
-        "pNum": ["ID", "Preacher ID", "Preacher Number", "Preacher #"],
-        "eNum": ["Donor #", "Donor Number", "Donor ID", "Envelope Number"],
+        # No cover-sheet names here ('Preacher Number', 'Envelope Number'), so picking the
+        # cover sheet in this slot errors instead of flagging every donor for a TY note
+        "pNum": ["ID", "Preacher ID", "Preacher #"],
+        "eNum": ["Donor #", "Donor Number", "Donor ID"],
     }, label="Extra Gift Report spreadsheet")[["eNum", "pNum"]]
     giftDF = giftDF.assign(eNum=_clean_id(giftDF["eNum"]), pNum=_clean_id(giftDF["pNum"]))
     giftDF = giftDF[(giftDF["eNum"] != "") & (giftDF["pNum"] != "")]

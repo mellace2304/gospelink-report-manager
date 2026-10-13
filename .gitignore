@@ -1,3 +1,10 @@
+# ── Gospelink local files (never commit: client data / runtime state) ──
+tests/data/
+local/
+gospelink_config.json
+gospelink_config_history.json
+merged_donors.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
