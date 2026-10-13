@@ -15,8 +15,8 @@ def test_cover_sheet_loads(make_xlsx, cover_rows):
     donors = Merge.getDonors(make_xlsx("cover", cover_rows))
     assert set(donors) == {"100", "200"}
     d = donors["100"]
-    assert d.eNum == "3153"
-    assert set(d.preachers) == {"116038", "116025c", "116025"}  # 116025 is the child's guardian placeholder
+    assert d.eNum == "1001"
+    assert set(d.preachers) == {"900001", "900002c", "900002"}  # 900002 is the child's guardian placeholder
     assert d.street == "1 Main St Apt 2"
     assert d.send_quarterly
     assert donors["200"].eNum == ""
@@ -43,10 +43,10 @@ def donors(make_xlsx, cover_rows):
     return Merge.getDonors(make_xlsx("cover", cover_rows))
 
 
-GIFTS = [[116038, "Preacher, Alpha", 9, 3153, "Test Donor One"],
-         [116025, "Preacher, Bravo", 80, 3153, "Test Donor One"],
-         [116029, "Preacher, Charlie", 50, 9999, "Test Donor Unknown"]]
-EXPECTED = [("100", "116025"), ("100", "116038")]
+GIFTS = [[900001, "Preacher, Alpha", 9, 1001, "Test Donor One"],
+         [900002, "Preacher, Bravo", 80, 1001, "Test Donor One"],
+         [900003, "Preacher, Charlie", 50, 9999, "Test Donor Unknown"]]
+EXPECTED = [("100", "900001"), ("100", "900002")]
 
 
 def test_extra_gifts_standard(make_xlsx, donors):
@@ -68,7 +68,7 @@ def test_extra_gifts_tolerated_layouts(make_xlsx, donors, name, rows, sheet):
 
 
 def test_extra_gifts_skips_blank_and_memo_rows(make_xlsx, donors):
-    rows = [GIFT_HEADERS] + GIFTS + [[None, None, 10, 3153, ""], [None, None, None, "for church rent.", None]]
+    rows = [GIFT_HEADERS] + GIFTS + [[None, None, 10, 1001, ""], [None, None, None, "for church rent.", None]]
     unmatched = Merge.enforceTY(donors, make_xlsx("gifts", rows, "Spons Xtra"))
     assert enforced(donors) == EXPECTED
     assert unmatched == ["9999"]

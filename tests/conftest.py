@@ -34,13 +34,13 @@ def make_xlsx(tmp_path):
 
 @pytest.fixture
 def cover_rows():
-    """Two donors: 100 (envelope 3153, preachers 116038 and 116025c) and 200 (no envelope #)."""
+    """Two donors: 100 (envelope 1001, preachers 900001 and 900002c) and 200 (no envelope #)."""
     def row(acct, pnum, pname, env, ename):
         return ["Sponsor", "Active", "", 30, 30, "", acct, pnum, pname, env, ename,
                 "1 Main St\nApt 2", "Ames", "IA", 50010, f"{acct}@example.com", "E-Mail"]
     return [
         COVER_HEADERS,
-        row(100, 116038, "Preacher, Alpha", 3153, "Test Donor One"),
-        row(100, "116025c", "Preacher, Bravo", 3153, "Test Donor One"),
-        row(200, 116029, "Preacher, Charlie", None, "Test Donor Two"),
+        row(100, 900001, "Preacher, Alpha", 1001, "Test Donor One"),
+        row(100, "900002c", "Preacher, Bravo", 1001, "Test Donor One"),
+        row(200, 900003, "Preacher, Charlie", None, "Test Donor Two"),
     ]
