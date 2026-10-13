@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 import fitz
 from docx import Document
 from pathlib import Path
@@ -28,6 +29,74 @@ def _validate_pdf(path: str) -> tuple[bool, str]:
     if size < 100:
         return False, f"suspiciously small ({size} bytes)"
     return True, ""
+
+
+class SpreadsheetFormatError(ValueError):
+    """An input spreadsheet is missing columns we need. Message is shown to the user as-is."""
+
+
+def _norm_header(value) -> str:
+    """'Donor #', 'Donor#', 'donor number ', 'Donor No.' -> 'donor#'"""
+    s = str(value).strip().lower()
+    s = re.sub(r"\bnumber\b|\bno\b\.?", "#", s)
+    return re.sub(r"[^a-z0-9#]", "", s)
+
+
+def _clean_id(series: pd.Series) -> pd.Series:
+    """Normalize ID columns so 3153, 3153.0 and ' 3153 ' all become '3153'; blanks become ''."""
+    s = series.astype(object).fillna("").astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
+    return s.where(~s.str.lower().isin(["", "nan", "none", "nat", "<na>"]), "")
+
+
+def _read_required_columns(file: str, sheet_name: str | None, required: dict[str, list[str]],
+                           label: str, scan_rows: int = 15) -> pd.DataFrame:
+    """Read a sheet, locating the header row and required columns tolerantly.
+
+    `required` maps the name we want each column renamed to -> accepted header spellings
+    (the first spelling is the one shown to the user). The header row may be anywhere in
+    the first `scan_rows` rows. Raises SpreadsheetFormatError with a readable message.
+    """
+    xls = pd.ExcelFile(file)
+    if sheet_name is None:
+        sheet = xls.sheet_names[0]
+    else:
+        matches = [s for s in xls.sheet_names if _norm_header(s) == _norm_header(sheet_name)]
+        sheet = matches[0] if matches else xls.sheet_names[0]
+
+    raw = pd.read_excel(xls, sheet_name=sheet, header=None, dtype=object)
+    aliases = {canon: [_norm_header(a) for a in alts] for canon, alts in required.items()}
+
+    best_row, best_found = 0, {}
+    for i in range(min(scan_rows, len(raw))):
+        normed = [_norm_header(v) if pd.notna(v) else "" for v in raw.iloc[i]]
+        found = {}
+        for canon, alts in aliases.items():
+            # Earlier spellings win, so 'Envelope Name' beats 'Donor Name' when both exist
+            j = next((normed.index(a) for a in alts if a in normed), None)
+            if j is not None:
+                found[canon] = j
+        if len(found) == len(required):
+            headers = [str(v).strip() if pd.notna(v) else f"Unnamed: {j}" for j, v in enumerate(raw.iloc[i])]
+            for canon, j in found.items():
+                headers[j] = canon
+            df = raw.iloc[i + 1:].reset_index(drop=True)
+            df.columns = headers
+            return df
+        if len(found) > len(best_found):
+            best_row, best_found = i, found
+
+    missing = [f"'{alts[0]}'" for canon, alts in required.items() if canon not in best_found]
+    seen = [str(v).strip() for v in raw.iloc[best_row]] if len(raw) else []
+    seen = [f"'{v}'" for v in seen if v and v.lower() != "nan"][:12]
+    where = f"tab '{sheet}'"
+    if sheet_name is not None and _norm_header(sheet) != _norm_header(sheet_name):
+        where = f"no tab named '{sheet_name}' (checked first tab '{sheet}')"
+    raise SpreadsheetFormatError(
+        f"The {label} '{os.path.basename(file)}' ({where}) is missing required column(s): "
+        f"{', '.join(missing)}. Headers found: {', '.join(seen) or 'none'}. "
+        f"Make sure the column headers are in the first row and the correct file is selected."
+    )
+
 
 class Preacher:
     def __init__(self,pNum:str,pName:str):
@@ -150,13 +219,20 @@ class Donor:
         return reasons
 
 def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx") -> dict[str,Donor]:
-    coverSheetDF = pd.read_excel(file)
+    coverSheetDF = _read_required_columns(file, None, {
+        "Account Number": ["Account Number", "Account #"],
+        "Preacher Number": ["Preacher Number", "Preacher #", "Preacher ID"],
+        "Preacher Name": ["Preacher Name"],
+        "Envelope Number": ["Envelope Number", "Envelope #", "Donor #", "Donor Number"],
+        "Envelope Name": ["Envelope Name", "Donor Name"],
+    }, label="Cover Sheet Spreadsheet")
     dropColumns = ['Type', 'Status', 'Note', 'Sponsorship Amount', 'Pledge','Donor/Preacher Combo']
-    coverSheetDF = coverSheetDF.dropna(subset=['Account Number'])
-    coverSheetDF["Account Number"] = coverSheetDF["Account Number"].astype(int).astype(str) 
-    coverSheetDF = (coverSheetDF.dropna(subset=['Account Number'])
+    for col in ["Account Number", "Envelope Number", "Preacher Number"]:
+        coverSheetDF[col] = _clean_id(coverSheetDF[col])
+    coverSheetDF = coverSheetDF[coverSheetDF["Account Number"] != ""]
+    coverSheetDF = (coverSheetDF
                     .astype(str)
-                    .drop(columns=dropColumns)
+                    .drop(columns=dropColumns, errors="ignore")
                     .fillna("")
                     .rename(columns={
                         "Preacher Number": "pNum",
@@ -173,7 +249,8 @@ def getDonors(file:str=".\\Data\\Spreadsheets\\2026-01-22 Cover Sheet Data.xlsx"
                     }).astype(str)
                     
                     )
-    coverSheetDF["street"] = coverSheetDF["street"].str.replace("\n",' ')
+    if "street" in coverSheetDF:
+        coverSheetDF["street"] = coverSheetDF["street"].str.replace("\n",' ')
     donors = {}
     for _, row in coverSheetDF.iterrows():
         row = {str(k): v for k, v in row.fillna("").to_dict().items()}
@@ -213,30 +290,32 @@ def findDonor(*, eNum=None, eName=None, aNum=None, donors=None) -> Donor | None:
     return None
 
 
-def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> None:
-    # Get data from both sheets, rename columns, and concatenate into one DataFrame
-    giftDF = pd.read_excel(extraGiftFile,sheet_name="Spons Xtra")
-    giftDF = giftDF.rename(columns={  # ID	Name	Amount	Donor #	Donor Name
-        "ID": "pNum",
-        "Donor #": "eNum"
-    })[["eNum","pNum"]].dropna().astype(str)
-    
-    
+def enforceTY(donors:dict[str,Donor],extraGiftFile:str = "") -> list[str]:
+    """Flag preacher-donor combos that need a TY note. Returns donor #s not found in the cover sheet."""
+    giftDF = _read_required_columns(extraGiftFile, "Spons Xtra", {  # ID	Name	Amount	Donor #	Donor Name
+        "pNum": ["ID", "Preacher ID", "Preacher Number", "Preacher #"],
+        "eNum": ["Donor #", "Donor Number", "Donor ID", "Envelope Number"],
+    }, label="Extra Gift Report spreadsheet")[["eNum", "pNum"]]
+    giftDF = giftDF.assign(eNum=_clean_id(giftDF["eNum"]), pNum=_clean_id(giftDF["pNum"]))
+    giftDF = giftDF[(giftDF["eNum"] != "") & (giftDF["pNum"] != "")]
+
     donors_by_eNum = {d.eNum: d for d in donors.values() if d.eNum}
     sponsorBlacklist = ["21956","20325","1940","1287","1565","1787","3548","3628","3990","5705","7608","604110"]
-    
+    unmatched = []
+
     for _, row in giftDF.iterrows():
         if row["eNum"] in sponsorBlacklist:
              continue
         donor = donors_by_eNum.get(row["eNum"])
         if donor == None:
-                print("what the.")
-                print(str(row))
-                continue #fix this
+                if row["eNum"].isdigit():  # skip memo/note rows that sit in the Donor # column
+                    unmatched.append(row["eNum"])
+                continue
         preacher = donor.preachers.get(row["pNum"])
         if preacher is not None:
             preacher.enforce()
-        
+    return sorted(set(unmatched))
+
 def addReports(donors:dict[str,Donor],directory:str=".\\Data\\Reports") -> None:
     reports = os.listdir(directory)
     blacklist=["pcf","widow","rdf",".docx","rd"]

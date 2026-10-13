@@ -187,7 +187,9 @@ async function api(path, opts = {}) {
 
 // ── Toast ─────────────────────────────────────────────────────────────────
 function Toast({ message, type, onClose }) {
-    useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, []);
+    // Errors can be long explanations; keep them up long enough to read
+    const ms = type === "error" ? Math.min(20000, Math.max(4000, String(message).length * 60)) : 4000;
+    useEffect(() => { const t = setTimeout(onClose, ms); return () => clearTimeout(t); }, []);
     return <div className={`toast ${type}`}>{message}</div>;
 }
 

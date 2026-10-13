@@ -18,7 +18,7 @@ from Merge import (
     Donor, Preacher, getDonors,
     enforceTY, addReports, assignCoverLetters,
     merge, createCoverLetter,
-    docx_to_pdf
+    docx_to_pdf, SpreadsheetFormatError
 )
 
 app = Flask(__name__, static_folder="static")
@@ -194,7 +194,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.7"
+APP_VERSION = "1.5.8"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])
@@ -377,6 +377,9 @@ def load_donors():
             state["steps_completed"].append("load")
         log(f"Loaded {len(state['donors'])} donors")
         return jsonify({"ok": True, "count": len(state["donors"])})
+    except SpreadsheetFormatError as e:
+        log(f"Spreadsheet problem: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -405,12 +408,17 @@ def enforce_ty():
         fp = state["config"]["extraGiftFile"]
         if not fp or not os.path.exists(fp):
             return jsonify({"ok": False, "error": f"File not found: {fp}"}), 400
-        enforceTY(state["donors"], fp)
+        unmatched = enforceTY(state["donors"], fp)
         enforced = sum(1 for d in state["donors"].values() for p in d.preachers.values() if p.noteNecessary)
         if "enforce_ty" not in state["steps_completed"]:
             state["steps_completed"].append("enforce_ty")
         log(f"Enforced TY on {enforced} preacher-donor combos")
+        if unmatched:
+            log(f"{len(unmatched)} donor #(s) in the extra gift report aren't in the cover sheet: {', '.join(unmatched[:20])}")
         return jsonify({"ok": True, "enforced": enforced})
+    except SpreadsheetFormatError as e:
+        log(f"Spreadsheet problem: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -462,6 +470,9 @@ def run_all():
         results["total"] = len(state["donors"])
         log(f"Pipeline complete: {ready}/{results['total']} ready")
         return jsonify({"ok": True, "results": results})
+    except SpreadsheetFormatError as e:
+        log(f"Spreadsheet problem: {e}")
+        return jsonify({"ok": False, "error": str(e), "results": results}), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e), "results": results}), 500
