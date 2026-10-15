@@ -194,7 +194,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.10"
+APP_VERSION = "1.5.11"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])
@@ -536,7 +536,7 @@ def create_mass_coverletters():
         for donor in state["donors"].values():
             if target == "missing" and donor.coverLetter != "":
                 continue
-            createCoverLetter(donor, output_path=cl_dir, template_path=tmpl)
+            createCoverLetter(donor, output_path=cl_dir, template_path=tmpl, overwrite=(target == "all"))
             created += 1
 
         failures = docx_to_pdf(cl_dir, cl_dir)

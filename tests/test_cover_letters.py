@@ -84,3 +84,55 @@ def test_word_lock_files_are_ignored(tmp_path, word):
     fake = word()
     Merge.docx_to_pdf(tmp_path, tmp_path)
     assert fake.opened == ["4001.docx"]
+
+
+# ── createCoverLetter overwrite (the "Recreate All" button) ──────────────────
+
+@pytest.fixture
+def template(tmp_path):
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("«Envelope_Name»")
+    doc.add_paragraph("«Envelope_Number»")
+    path = tmp_path / "template.docx"
+    doc.save(path)
+    return str(path)
+
+
+def make_donor(name="New Name"):
+    return Merge.Donor(pNum="1", pName="P", eNum="5", eName=name, aNum="9001")
+
+
+def docx_text(path):
+    from docx import Document
+    return "\n".join(p.text for p in Document(str(path)).paragraphs)
+
+
+def test_existing_pdf_is_kept_without_overwrite(tmp_path, template):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "9001.pdf").write_bytes(GOOD_PDF)
+    Merge.createCoverLetter(make_donor(), str(out), template)
+    assert not (out / "9001.docx").exists()
+
+
+def test_overwrite_rebuilds_from_current_data(tmp_path, template):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "9001.pdf").write_bytes(GOOD_PDF)
+    (out / "9001.docx").write_bytes(b"stale docx")
+    donor = make_donor()
+    donor.coverLetter = str(out / "9001.pdf")
+
+    Merge.createCoverLetter(donor, str(out), template, overwrite=True)
+
+    assert not (out / "9001.pdf").exists()  # old PDF gone, so docx_to_pdf will reconvert
+    assert "New Name" in docx_text(out / "9001.docx")
+    assert donor.coverLetter == ""
+
+
+def test_overwrite_with_nothing_to_replace(tmp_path, template):
+    out = tmp_path / "out"
+    out.mkdir()
+    Merge.createCoverLetter(make_donor(), str(out), template, overwrite=True)
+    assert "New Name" in docx_text(out / "9001.docx")

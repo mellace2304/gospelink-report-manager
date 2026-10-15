@@ -617,6 +617,7 @@ function MergePage({ status, showToast, refreshStatus }) {
     };
 
     const runCoverLetters = async (target) => {
+        if (target === "all" && !window.confirm(`Delete and rebuild the cover letters for all ${status.total.toLocaleString()} donors? This replaces every existing cover letter PDF and can take a while.`)) return;
         setLoading("cl-" + target);
         try {
             const res = await api("/create-coverletters", { method: "POST", body: { target } });

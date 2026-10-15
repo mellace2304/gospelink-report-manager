@@ -510,9 +510,21 @@ def fill_template(input_path, output_path, replacements:dict):
     doc.save(output_path)
 
 
-def createCoverLetter(donor:Donor,output_path=".\\Data\\Output\\CoverLetters",template_path=".\\Data\\Spreadsheets\\Cover Sheet Q3-2025.docx"):
+def createCoverLetter(donor:Donor,output_path=".\\Data\\Output\\CoverLetters",template_path=".\\Data\\Spreadsheets\\Cover Sheet Q3-2025.docx",overwrite=False):
+    """Fill the template for one donor. With overwrite=True the donor's existing DOCX and PDF are
+    deleted first so the letter is rebuilt from the current data and template."""
     pdf_target  = os.path.join(output_path, f"{donor.aNum}.pdf")
     docx_target = os.path.join(output_path, f"{donor.aNum}.docx")
+
+    if overwrite:
+        for old in (pdf_target, docx_target):
+            try:
+                os.remove(old)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                raise OSError(f"Couldn't replace {os.path.basename(old)} (is it open in Word, Acrobat or a sync app?): {e}") from e
+        donor.coverLetter = ""  # don't keep pointing at the file we just deleted
 
     # Only skip if a real PDF already exists
     ok, _ = _validate_pdf(pdf_target)
