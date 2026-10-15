@@ -549,23 +549,27 @@ def createCoverLetter(donor:Donor,output_path=".\\Data\\Output\\CoverLetters",te
     fill_template(template_path,path,data)
     print(f"{donor.aNum} created!")
 
-def docx_to_pdf(input_dir, output_dir, restart_every=50, pause=0.5, files=None):
+def docx_to_pdf(input_dir, output_dir, restart_every=50, pause=0.5, files=None) -> list[tuple[str, str]]:
+    """Convert DOCX files to PDF through Word. Returns [(docx name, reason)] for every file that failed."""
     input_dir = Path(input_dir).resolve()
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if files is None:
-        files = sorted(input_dir.glob("*.docx"))
+        # '~$' files are Word's lock files, not documents
+        files = sorted(f for f in input_dir.glob("*.docx") if not f.name.startswith("~$"))
     else:
         files = [Path(f) for f in files]
 
-    # Skip files whose PDFs already exist before touching Word
-    pending = [f for f in files if not (output_dir / f"{f.stem}.pdf").exists()]
+    # Skip files that already have a valid PDF. A zero-byte/corrupt PDF left by an
+    # interrupted run counts as missing, otherwise it would never be reconverted.
+    pending = [f for f in files if not _validate_pdf(str(output_dir / f"{f.stem}.pdf"))[0]]
     if not pending:
-        return
-    
+        return []
+
     wdFormatPDF = 17
-    
+    failures: list[tuple[str, str]] = []
+
     pythoncom.CoInitialize()
     word = None
 
@@ -576,23 +580,33 @@ def docx_to_pdf(input_dir, output_dir, restart_every=50, pause=0.5, files=None):
 
         count = 0
 
-        for idx, docx_path in enumerate(files, 1):
+        for idx, docx_path in enumerate(pending, 1):
             pdf_path = output_dir / f"{docx_path.stem}.pdf"
-
-            if pdf_path.exists():
-                continue
 
             doc = None
             try:
-                print(f"[{idx}/{len(files)}] {docx_path.name}")
+                print(f"[{idx}/{len(pending)}] {docx_path.name}")
+                if pdf_path.exists():
+                    pdf_path.unlink()
                 doc = word.Documents.Open(str(docx_path))
                 doc.SaveAs(str(pdf_path), FileFormat=wdFormatPDF)
                 count += 1
+                ok, reason = _validate_pdf(str(pdf_path))
+                if not ok:
+                    raise IOError(f"Word produced an invalid PDF ({reason})")
             except Exception as e:
                 print(f"Failed: {docx_path.name}: {e}")
+                failures.append((docx_path.name, str(e)))
+                try:
+                    pdf_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             finally:
                 if doc is not None:
-                    doc.Close(False)
+                    try:
+                        doc.Close(False)
+                    except Exception:
+                        pass
 
             if count >= restart_every:
                 word.Quit()
@@ -604,8 +618,14 @@ def docx_to_pdf(input_dir, output_dir, restart_every=50, pause=0.5, files=None):
 
     finally:
         if word is not None:
-            word.Quit()
+            try:
+                word.Quit()
+            except Exception:
+                pass  # Word already died; the per-file failures are what matter
         pythoncom.CoUninitialize()
+    return failures
+
+
 def assignCoverLetters(donors, directory=".\\Data\\Output\\CoverLetters"):
     if not os.path.isdir(directory):
         print(f"[assignCoverLetters] directory missing: {directory}")

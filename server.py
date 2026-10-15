@@ -18,7 +18,7 @@ from Merge import (
     Donor, Preacher, getDonors,
     enforceTY, addReports, assignCoverLetters,
     merge, createCoverLetter,
-    docx_to_pdf, SpreadsheetFormatError
+    docx_to_pdf, SpreadsheetFormatError, _validate_pdf
 )
 
 app = Flask(__name__, static_folder="static")
@@ -194,7 +194,7 @@ def pick_folder():
 
 # ── Routes: Config ────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.5.9"
+APP_VERSION = "1.5.10"
 GITHUB_REPO = "mellace2304/gospelink-report-manager"
 
 @app.route("/api/check-update", methods=["GET"])
@@ -500,11 +500,16 @@ def create_single_coverletter(aNum):
         # Convert the single docx
         docx_path = os.path.join(cl_dir, f"{donor.aNum}.docx")
         pdf_path = os.path.join(cl_dir, f"{donor.aNum}.pdf")
-        if os.path.exists(docx_path) and not os.path.exists(pdf_path):
-            docx_to_pdf(cl_dir, cl_dir, files=[docx_path])
+        failures = []
+        if os.path.exists(docx_path):
+            failures = docx_to_pdf(cl_dir, cl_dir, files=[docx_path])
 
-        if os.path.exists(pdf_path):
-            donor.coverLetter = pdf_path
+        ok, _ = _validate_pdf(pdf_path)
+        if not ok:
+            reason = failures[0][1] if failures else "Word did not produce a PDF"
+            log(f"Cover letter FAILED for {donor.eName} (A#{aNum}): {reason}")
+            return jsonify({"ok": False, "error": f"Couldn't create the cover letter PDF for {donor.eName} (A#{aNum}): {reason}"}), 500
+        donor.coverLetter = pdf_path
 
         log(f"Cover letter created for {donor.eName} (A#{aNum})")
         return jsonify({"ok": True, "aNum": aNum})
@@ -534,12 +539,19 @@ def create_mass_coverletters():
             createCoverLetter(donor, output_path=cl_dir, template_path=tmpl)
             created += 1
 
-        docx_to_pdf(cl_dir, cl_dir)
+        failures = docx_to_pdf(cl_dir, cl_dir)
         assignCoverLetters(state["donors"], cl_dir)
         assigned = sum(1 for d in state["donors"].values() if d.coverLetter != "")
 
         log(f"Created {created} cover letters, {assigned} assigned as PDF")
-        return jsonify({"ok": True, "created": created, "assigned": assigned})
+        if failures:
+            log(f"{len(failures)} cover letter(s) failed to convert to PDF:")
+            for name, reason in failures:
+                log(f"  {name}: {reason}")
+        return jsonify({"ok": True, "created": created, "assigned": assigned,
+                        "failed": len(failures),
+                        "failedAccounts": [os.path.splitext(n)[0] for n, _ in failures[:20]],
+                        "failedReason": failures[0][1] if failures else ""})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500

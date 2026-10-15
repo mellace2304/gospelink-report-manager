@@ -621,7 +621,12 @@ function MergePage({ status, showToast, refreshStatus }) {
         try {
             const res = await api("/create-coverletters", { method: "POST", body: { target } });
             if (res.ok) {
-                showToast(`Created ${res.created} cover letters, ${res.assigned} assigned`);
+                if (res.failed > 0) {
+                    const shown = res.failedAccounts.join(", ") + (res.failed > res.failedAccounts.length ? ", …" : "");
+                    showToast(`${res.failed} cover letter${res.failed === 1 ? "" : "s"} failed to convert to PDF (A# ${shown}). ${res.failedReason} Close Word completely and click Create Missing Only again.`, "error");
+                } else {
+                    showToast(`Created ${res.created} cover letters, ${res.assigned} assigned`);
+                }
                 await refreshStatus();
             } else showToast(res.error || "Failed", "error");
         } catch (e) { showToast(e.message, "error"); }
